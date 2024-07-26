@@ -1,0 +1,30 @@
+[package]
+name = "rust-tui"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "rust-sso"
+path = "src/main.rs"
+
+[dependencies]
+color-eyre = "0.6.3"
+ratatui = "0.27.0"
+aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
+aws-sdk-sso = "1.36.0"
+aws-sdk-ssooidc = "^1.10.0"
+aws-types = "1.1.2"
+tokio = { version = "1", features = ["full"] }
+directories = "5.0.1"
+anyhow = "1.0.86"
+rust-ini = "0.21.0"
+serde = { version = "1.0.195",  features = ["derive"] }
+serde_json = "1.0.111"
+chrono = "0.4.31"
+sha1 = "0.10.6"
+open = "5.0.1"
+http = "1.1.0"
+reqwest = "0.12.5"
+serde_urlencoded = "0.7.1"
