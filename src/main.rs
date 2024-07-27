@@ -202,12 +202,12 @@ impl App {
 
         #[cfg(target_os = "macos")]
         {
-            self.credential_message = "Setting environment variables for AWS CLI - MacOS...".to_string();
+            self.credential_message = "Copied environment variable exports for AWS CLI - MacOS...".to_string();
         }
 
         #[cfg(target_os = "linux")]
         {
-            self.credential_message = "Setting environment variables for AWS CLI - Linux...".to_string();
+            self.credential_message = "Copied environment variable exports for AWS CLI - Linux...".to_string();
         }
 
         let _ = sso::export_env_vars(&self.role_credentials);
