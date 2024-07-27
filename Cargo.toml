@@ -29,3 +29,4 @@ http = "1.1.0"
 reqwest = "0.12.5"
 serde_urlencoded = "0.7.1"
 webbrowser = "1.0.1"
+openssl = { version = "0.10", features = ["vendored"] }

@@ -46,7 +46,7 @@ pub struct SsoAccessTokenProvider {
 }
 
 impl SsoAccessTokenProvider {
-    const CLIENT_NAME: &'static str = "iclasspro-sso";
+    const CLIENT_NAME: &'static str = "aws-sso";
     const DEVICE_GRANT_TYPE: &'static str = "urn:ietf:params:oauth:grant-type:device_code";
     const REFRESH_GRANT_TYPE: &'static str = "refresh_token";
 
