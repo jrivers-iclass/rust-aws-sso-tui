@@ -1,10 +1,11 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time;
-use std::{fs, path::PathBuf, process::Command};
+use std::{fs, path::PathBuf, process::{Command, Stdio}};
 use crate::aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider};
 use aws_config::{BehaviorVersion, Region};
 use directories::UserDirs;
+use std::io::Write;
 
 #[derive(Default, Clone)]
 pub struct RoleCredentials {
@@ -152,7 +153,7 @@ pub async fn open_console(role_credentials: RoleCredentials, account: AccountInf
     } else if cfg!(target_os = "macos") {
         // For macOS
         Command::new("open")
-            .args(&["-a", "Firefox", "--args", "--new-instance", "--profile", profile_path_str, &federated_url])
+            .args(&["-na", "Firefox", "--args", "--new-instance", "--profile", profile_path_str, &federated_url])
             .status()
             .expect("failed to open browser");
     } else if cfg!(target_os = "linux") {
@@ -170,39 +171,45 @@ pub async fn open_console(role_credentials: RoleCredentials, account: AccountInf
 }
 
 pub fn export_env_vars(credentials: &RoleCredentials) -> Result<(), anyhow::Error> {
-    let env_vars = vec![
-        format!("setx AWS_ACCESS_KEY_ID {}", &credentials.access_key_id),
-        format!("setx AWS_SECRET_ACCESS_KEY {}", &credentials.secret_access_key),
-        format!("setx AWS_SESSION_TOKEN {}", &credentials.session_token),
-    ];    
-
-    #[cfg(target_os = "windows")]
-    {
+    if cfg!(target_os = "windows") {
+        let env_vars = vec![
+            format!("setx AWS_ACCESS_KEY_ID {}", &credentials.access_key_id),
+            format!("setx AWS_SECRET_ACCESS_KEY {}", &credentials.secret_access_key),
+            format!("setx AWS_SESSION_TOKEN {}", &credentials.session_token),
+        ];  
         for env_var in env_vars {
             let _ = Command::new("cmd")
                 .args(["/C", &env_var])
                 .output();
         }
-    }
+    } else {
+        let env_vars = vec![
+            format!("export AWS_ACCESS_KEY_ID={}", &credentials.access_key_id),
+            format!("export AWS_SECRET_ACCESS_KEY={}", &credentials.secret_access_key),
+            format!("export AWS_SESSION_TOKEN={}", &credentials.session_token),
+        ];
 
-    #[cfg(target_os = "macos")]
-    {
-        for env_var in env_vars {
-            let _ = Command::new("export")
-                .args(&env_var.splitn(2, ' ').collect::<Vec<&str>>())
-                .output();
+        // let shell = if cfg!(target_os = "macos") { "zsh" } else { "bash" };
+        // for env_var in env_vars {
+        //     Command::new(shell)
+        //         .args(["-c", &env_var])
+        //         .output()
+        //         .expect("Failed to execute command");
+        // }
+
+        let export_commands = env_vars.join("\n");
+        let mut pbcopy = Command::new("pbcopy")
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("Failed to start pbcopy");
+
+        {
+            let stdin = pbcopy.stdin.as_mut().expect("Failed to open stdin");
+            stdin.write_all(export_commands.as_bytes()).expect("Failed to write to pbcopy");
         }
+
+        pbcopy.wait().expect("Failed to copy to clipboard");
     }
-
-    #[cfg(target_os = "linux")]
-    {
-        for env_var in env_vars {
-            let _ = Command::new("export")
-                .args(&env_var.splitn(2, ' ').collect::<Vec<&str>>())
-                .output();
-        }
-    }   
-
     Ok(())
 
 }
