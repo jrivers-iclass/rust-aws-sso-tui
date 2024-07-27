@@ -4,8 +4,7 @@ use aws::AccountInfo;
 use directories::UserDirs;
 use ini::Ini;
 use ratatui::{
-    crossterm::event::{self, Event, KeyEvent, KeyEventKind},
-    layout::{Constraint, Layout},   
+    crossterm::event::{self, Event, KeyEvent, KeyEventKind}, 
     Frame,
 };
 
