@@ -12,6 +12,7 @@
 ///     date: DateTime<Utc>
 /// }
 /// ```
+#[allow(deprecated)]
 pub mod json_date_format {
     use chrono::{DateTime, Utc, TimeZone};
     use serde::{self, Deserialize, Serializer, Deserializer};

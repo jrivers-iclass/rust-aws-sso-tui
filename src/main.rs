@@ -1,64 +1,40 @@
 use aws::AccountInfo;
 use ratatui::{
-    buffer::Buffer,
-    crossterm::{
-        cursor::position, event::{self, Event, KeyCode, KeyEvent, KeyEventKind}, style::Color // Add this line
-    },
-    layout::{Alignment, Constraint, Layout, Rect},
-    style::{Modifier, Style, Stylize},
-    symbols::border,
-    text::{Line, Span, Text},
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    layout::{Constraint, Layout},
     widgets::{
-        block::{Position, Title}, Block, Cell, Paragraph, Row, ScrollbarState, Table, TableState, Widget
+       ScrollbarState, TableState
     },
     Frame,
 };
 
 use color_eyre::{
-    eyre::{bail, WrapErr},
+    eyre::WrapErr,
     Result,
 };
-use sha1::digest::typenum::Length;
 
 mod errors;
 mod tui;
 mod sso;
 mod aws;
 mod utils;
+mod widgets;
+mod app;
+
+use app::*;
 
 const ITEM_HEIGHT: usize = 4;
 
 fn main() -> Result<()> {
     errors::install_hooks()?;
     let mut terminal = tui::init()?;
-    App::default().run(&mut terminal)?;
+    App::new().run(&mut terminal)?;
     tui::restore()?;
     Ok(())
 }
 
-#[derive(Default, Clone)]
-struct AccountRow {
-    account_name: String,
-    account_id: String,
-    roles: Vec<String>,
-}
-
-#[derive(Default, Clone)]
-pub struct App {
-    table_state: TableState,
-    rows: Vec<AccountRow>,
-    exit: bool,    
-    scroll_state: ScrollbarState,
-    selected_account: AccountRow,
-    role_table_state: TableState,
-    is_selected: bool,
-    role_is_selected: bool,
-    selected_role: String,
-    role_credentials: sso::RoleCredentials,
-}
-
 impl App {
-    async fn new() -> Self {
+    fn new() -> Self {
         let mut rows = Vec::new();
         rows.push(AccountRow {
             account_name: "Loading...".to_string(),
@@ -85,12 +61,14 @@ impl App {
                 expiration: "".to_string(),
             },
             role_is_selected: false,
+            credential_message: "".to_string(),
         }        
     }
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {   
         let sso_accounts = sso::get_sso_accounts();
+        self.rows = vec![];
         match sso_accounts {
             Ok(sso_accounts) => {          
                 for account in sso_accounts {
@@ -123,7 +101,7 @@ impl App {
             ]
         ).split(frame.size()); 
         if self.role_is_selected {
-            render_credentials(frame, self, rects[0]);
+            widgets::render_credentials(frame, self, rects[0]);
         } else {
             if self.is_selected {
                 rects = Layout::horizontal([
@@ -132,9 +110,9 @@ impl App {
                     ]
                 ).split(frame.size());
             }
-            render_accounts(frame,  self, rects[0]);
+            widgets::render_accounts(frame,  self, rects[0]);
             if self.is_selected {
-                render_roles(frame, self, rects[1]);
+                widgets::render_roles(frame, self, rects[1]);
             }
         }
 
@@ -153,7 +131,8 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
-        match key_event.code {
+        self.credential_message = "".to_string();
+        match key_event.code {            
             KeyCode::Char('q') => self.exit(),
             KeyCode::Up => {
                 if self.is_selected {
@@ -169,14 +148,22 @@ impl App {
                     self.next()
                 }
             },
-            KeyCode::Enter => self.open_console(),
+            KeyCode::Char('c') => {
+                self.credential_message = "Opening AWS Console...".to_string();
+                self.open_console()
+            }
             KeyCode::Right => {
                 if self.is_selected {
                     self.select_role();
                 } else {
                     self.select_account();
                 }
-            },           
+            },         
+            KeyCode::Char('e') => {
+                if self.role_is_selected {
+                    let _ = self.export();
+                }
+            },
             KeyCode::Left => {
                 if self.role_is_selected {
                     self.role_is_selected = false;
@@ -198,12 +185,33 @@ impl App {
                 roles: vec![],
             };
             let _ = sso::open_console(account_info, &self.selected_role);
+            self.credential_message += "Done!";
         }
         ()
     }
 
     fn exit(&mut self) {
         self.exit = true;
+    }
+
+    pub fn export(&mut self) {
+        #[cfg(target_os = "windows")]
+        {
+            self.credential_message = "Setting environment variables for AWS CLI - Windows...".to_string();
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            self.credential_message = "Setting environment variables for AWS CLI - MacOS...".to_string();
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            self.credential_message = "Setting environment variables for AWS CLI - Linux...".to_string();
+        }
+
+        let _ = sso::export_env_vars(&self.role_credentials);
+        self.credential_message += "Done!";
     }
 
     pub fn select_account(&mut self) {
@@ -305,162 +313,4 @@ impl App {
         self.table_state.select(Some(i));
         self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT);
     }
-}
-
-fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
-    let style = {
-        if app.is_selected {
-            Style::new().white()
-        } else {
-            Style::new().blue()
-        }
-    };
-    let instructions = Title::from(Line::from(vec![
-        " Scroll Up ".into(),
-        "<Up>".blue().bold(),
-        " Scroll Down ".into(),
-        "<Down>".blue().bold(),
-        " Select Account ".into(),
-        "<Right>".blue().bold(),
-        " Quit ".into(),
-        "<Q> ".blue().bold(),
-    ]));
-
-    let account_list_title = Title::from(format!(" Accounts ({}) ", app.rows.len()).bold());        
-    let account_list_block = Block::bordered()
-        .title(account_list_title.alignment(Alignment::Left))   
-        .title(instructions
-            .alignment(Alignment::Center)
-            .position(Position::Bottom)
-        )        
-        .border_set(border::THICK);
-
-    let widths = [
-        Constraint::Min(10),
-        Constraint::Min(20)
-    ];
-
-    let rows = app.rows.iter().map(|row| {
-        Row::new(vec![
-            Cell::from(row.account_name.clone()),
-            Cell::from(row.account_id.clone())
-        ])
-    });    
-
-    let binding = app.selected_account.clone();
-    let table = Table::new(rows, widths)
-        .column_spacing(1)
-        .style(style)
-        .header(
-            Row::new(vec!["Account Name", "Account ID"])
-                .style(Style::new().bold())                            
-        )                                
-        .footer(Row::new(vec!["Selected Account", &binding.account_id]).bold().yellow())
-        .block(account_list_block)
-        .highlight_style(Style::new().reversed())
-        .highlight_symbol(">>");
-
-    f.render_stateful_widget(table, area, &mut app.table_state);
-}
-
-fn render_roles(f: &mut Frame, app: &mut App, area: Rect) {
-    let instructions = Title::from(Line::from(vec![
-        " Scroll Up ".into(),
-        "<Up>".blue().bold(),
-        " Scroll Down ".into(),
-        "<Down>".blue().bold(),
-        " Select Role ".into(),        
-        "<Enter>".blue().bold(),
-        " Back ".into(),
-        "<Left>".blue().bold(),
-        " Quit ".into(),
-        "<Q> ".blue().bold(),
-    ]));
-    let role_list_title = Title::from(format!(" {} - Roles ", app.selected_account.account_name).bold());        
-    let role_list_block = Block::bordered()
-        .title(role_list_title.alignment(Alignment::Left))   
-        .title(instructions
-            .alignment(Alignment::Center)
-            .position(Position::Bottom)
-        )        
-        .border_set(border::THICK);
-
-    let widths = [
-        Constraint::Min(10)
-    ];
-
-    let rows = app.selected_account.roles.iter().map(|row| {
-        Row::new(vec![
-            Cell::from(row.clone())
-        ])
-    });    
-
-    // let mut binding = app.selected_account.clone();
-    let table = Table::new(rows, widths)
-        .column_spacing(1)
-        .style(Style::new().blue())
-        .header(
-            Row::new(vec!["Role"])
-                .style(Style::new().bold())                            
-        )                                
-        //.footer(Row::new(vec!["Selected Account", &binding.account_id]).bold().yellow())
-        .block(role_list_block)
-        .highlight_style(Style::new().reversed())
-        .highlight_symbol(">>");
-
-    f.render_stateful_widget(table, area, &mut app.role_table_state);
-}
-
-fn render_credentials(f: &mut Frame, app: &mut App, area: Rect) {
-    let instructions = Title::from(Line::from(vec![
-        " Back ".into(),
-        "<Left>".blue().bold(),        
-        " Console ".into(),
-        "<Enter>".blue().bold(),
-        " Quit ".into(),
-        "<Q> ".blue().bold(),
-    ]));
-    let title = Title::from(format!("Credentials for {} - {}", app.selected_account.account_name, app.selected_role).bold());        
-    let block = Block::bordered()
-        .title(title.alignment(Alignment::Left))   
-        .title(instructions
-            .alignment(Alignment::Center)
-            .position(Position::Bottom)
-        )        
-        .border_set(border::THICK);
-
-    let widths = [
-        Constraint::Max(20),
-        Constraint::Min(10),
-    ];
-
-    let rows = vec![
-        Row::new(vec![
-            Cell::from("Access Key ID"),
-            Cell::from(app.role_credentials.access_key_id.clone())
-        ]),
-        Row::new(vec![
-            Cell::from("Secret Access Key"),
-            Cell::from(app.role_credentials.secret_access_key.clone())
-        ]),
-        Row::new(vec![
-            Cell::from("Session Token"),
-            Cell::from(app.role_credentials.session_token.clone())
-        ]),
-        Row::new(vec![
-            Cell::from("Expiration"),
-            Cell::from(app.role_credentials.expiration.clone())
-        ]),
-    ];
-
-    // let mut binding = app.selected_account.clone();
-    let table = Table::new(rows, widths)
-        .column_spacing(1)
-        .style(Style::new().blue())                              
-        //.footer(Row::new(vec!["Selected Account", &binding.account_id]).bold().yellow())
-        .block(block)
-        .highlight_style(Style::new().reversed())
-        .highlight_symbol(">>");
-
-    f.render_widget(table, area);
 }

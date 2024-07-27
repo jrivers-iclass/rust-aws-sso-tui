@@ -1,5 +1,5 @@
 use super::AccessToken;
-use anyhow::{Result};
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 use crate::utils::json;
 

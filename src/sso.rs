@@ -1,8 +1,8 @@
-use reqwest::{Client, Request, Response};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time;
-use std::process::Command;
-use crate::aws::{session_name, AccountInfo, AccountInfoProvider, AwsCliConfigService, SsoAccessTokenProvider};
+use std::{fs, path::PathBuf, process::Command};
+use crate::aws::{session_name, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider};
 use aws_config::{BehaviorVersion, Region};
 use directories::UserDirs;
 
@@ -63,7 +63,7 @@ pub async fn get_account_roles(account: AccountInfo) -> Result<Vec<String>, anyh
 }
 
 #[::tokio::main]
-pub async fn get_account_role_credentials(account: AccountInfo, role: &str) -> Result<(RoleCredentials), anyhow::Error> {
+pub async fn get_account_role_credentials(account: AccountInfo, role: &str) -> Result<RoleCredentials, anyhow::Error> {
     time::sleep(time::Duration::from_millis(100)).await;
     let start_url = "https://iclasspro.awsapps.com/start";
     let user_dirs = UserDirs::new().expect("Could not resolve user HOME.");
@@ -92,6 +92,7 @@ pub async fn get_account_role_credentials(account: AccountInfo, role: &str) -> R
     })
 }
 
+#[allow(non_snake_case)]
 #[derive(Debug, Serialize, Deserialize)]
 struct SessionData {
     sessionId: String,
@@ -134,11 +135,13 @@ pub async fn open_console(account: AccountInfo, role: &str) -> Result<(), anyhow
     };
 
     let aws_federated_signin_endpoint = "https://signin.aws.amazon.com/federation";
-    //let signin_token = format!("Action=getSigninToken&SessionType=json&Session={}", serde_json::to_string(&session_data)?);    
+    let session_data_json = serde_json::to_string(&session_data)?;
+
+
     let token_params = [
         ("Action", "getSigninToken"), 
         ("SessionDuration", "43200"),
-        ("Session", &serde_json::to_string(&session_data)?)
+        ("Session", &session_data_json)
     ];
 
     let client = Client::new();
@@ -158,25 +161,92 @@ pub async fn open_console(account: AccountInfo, role: &str) -> Result<(), anyhow
         ("SigninToken", &signin_token)
     ];
 
-    let federated_url = format!("{}?{}", aws_federated_signin_endpoint, serde_urlencoded::to_string(&federated_params)?);
-    let _ = open::that(federated_url.clone());
+    let federated_url = format!("{}?{}", aws_federated_signin_endpoint, serde_urlencoded::to_string(&federated_params)?);    
+    // open::with_command(federated_url, "firefox");   
+    let profile_name = format!("aws-sso-{}-{}", account.account_id, role);
+    let profile_dir = create_firefox_profile(&profile_name);
+    let profile_path_str = profile_dir.to_str().unwrap();
 
-    open::with_command("", format!("cmd /c set AWS_ACCESS_KEY_ID={}", &session_data.sessionId));
-    let env_vars = vec![
-        format!("setx AWS_ACCESS_KEY_ID {}", &session_data.sessionId),
-        format!("setx AWS_SECRET_ACCESS_KEY {}", &session_data.sessionKey),
-        format!("setx AWS_SESSION_TOKEN {}", &session_data.sessionToken),
-    ];
-
-    print!("Setting environment variables for AWS CLI...");
-
-
-    for env_var in env_vars {
-        print!("Setting environment variable: {}", env_var);
-        let _ = Command::new("cmd")
-            .args(["/C", &env_var])
-            .output();
-    }    
+    if cfg!(target_os = "windows") {
+        // For Windows
+        Command::new("powershell")
+            .args(&["-Command", "Start-Process", "firefox", "-ArgumentList", &format!("'--new-instance', '--profile', '{}', '{}'", profile_path_str, &federated_url)])
+            .status()
+            .expect("failed to open browser");
+    } else if cfg!(target_os = "macos") {
+        // For macOS
+        Command::new("open")
+            .args(&["-a", "Firefox", "--args", "--new-instance", "--profile", profile_path_str, &federated_url])
+            .status()
+            .expect("failed to open browser");
+    } else if cfg!(target_os = "linux") {
+        // For Linux
+        Command::new("firefox")
+            .args(&["--new-instance", "--profile", profile_path_str, &federated_url])
+            .status()
+            .expect("failed to open browser");
+    } else {
+        // Fallback
+        webbrowser::open(&federated_url).expect("failed to open browser");
+    }
 
     Ok(())
+}
+
+pub fn export_env_vars(credentials: &RoleCredentials) -> Result<(), anyhow::Error> {
+    let env_vars = vec![
+        format!("setx AWS_ACCESS_KEY_ID {}", &credentials.access_key_id),
+        format!("setx AWS_SECRET_ACCESS_KEY {}", &credentials.secret_access_key),
+        format!("setx AWS_SESSION_TOKEN {}", &credentials.session_token),
+    ];    
+
+    #[cfg(target_os = "windows")]
+    {
+        for env_var in env_vars {
+            let _ = Command::new("cmd")
+                .args(["/C", &env_var])
+                .output();
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        for env_var in env_vars {
+            let _ = Command::new("export")
+                .args(&env_var.splitn(2, ' ').collect::<Vec<&str>>())
+                .output();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        for env_var in env_vars {
+            let _ = Command::new("export")
+                .args(&env_var.splitn(2, ' ').collect::<Vec<&str>>())
+                .output();
+        }
+    }   
+
+    Ok(())
+
+}
+
+
+fn create_firefox_profile(profile_name: &str) -> PathBuf {
+    let user_dirs = UserDirs::new().expect("Could not find user directories");
+    let profile_dir = user_dirs.home_dir().join(format!(".mozilla/firefox/{}.{}", profile_name, "aws-sso"));
+
+    if !profile_dir.exists() {
+        fs::create_dir_all(&profile_dir).expect("Could not create profile directory");
+
+        // Create a basic prefs.js file for the profile
+        let prefs_content = r#"
+user_pref("browser.startup.homepage", "about:blank");
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("app.normandy.first_run", false);
+        "#;
+        fs::write(profile_dir.join("prefs.js"), prefs_content).expect("Could not write prefs.js file");
+    }
+
+    profile_dir
 }
