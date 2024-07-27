@@ -1,15 +1,30 @@
 use ratatui::{    
-    layout::{Alignment, Constraint, Rect},
-    style::{Style, Stylize},
-    symbols::border,
-    text::Line,
-    widgets::{
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Constraint, Rect}, style::{Style, Stylize}, symbols::border, text::Line, widgets::{
         block::{Position, Title}, Block, Cell, Row, Table
-    },
-    Frame,
+    }, Frame
 };
 
 use crate::app::App;
+
+pub fn handle_key_events(app: &mut App, key: KeyEvent) -> Result<(), ()>{
+    match key.code {
+        KeyCode::Char('q') => app.exit(),                
+        KeyCode::Char('c') => {            
+            app.credential_message = "Opening AWS Console...".to_string();
+            app.open_console()
+        }       
+        KeyCode::Char('e') => {            
+            let _ = app.export();
+        },
+        KeyCode::Left => {            
+            app.role_is_selected = false;     
+            app.current_page = crate::app::CurrentPage::Roles;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
 
 pub fn render_credentials(f: &mut Frame, app: &mut App, area: Rect) {
     let instructions = Title::from(Line::from(vec![

@@ -1,15 +1,35 @@
 use ratatui::{    
-    layout::{Alignment, Constraint, Rect},
-    style::{Style, Stylize},
-    symbols::border,
-    text::Line,
-    widgets::{
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Constraint, Rect}, style::{Style, Stylize}, symbols::border, text::Line, widgets::{
         block::{Position, Title}, Block, Cell, Row, Table
-    },
-    Frame,
+    }, Frame
 };
 
 use crate::app::App;
+
+pub fn handle_key_events(app: &mut App, key: KeyEvent) -> Result<(), ()>{
+    match key.code {
+        KeyCode::Down => {
+            app.next();
+        }
+        KeyCode::Up => {
+            app.previous();
+        }
+        KeyCode::Right => {
+            app.select_account();
+            app.current_page = crate::app::CurrentPage::Roles;
+        }
+        KeyCode::Char('c') => {
+            app.currently_editing = true;
+            app.current_page = crate::app::CurrentPage::Config;
+        }
+        KeyCode::Char('q') => {
+            app.exit = true;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
 
 pub fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
     let style = {

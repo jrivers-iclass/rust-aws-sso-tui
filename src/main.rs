@@ -2,7 +2,7 @@ use aws::AccountInfo;
 use directories::UserDirs;
 use ini::Ini;
 use ratatui::{
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    crossterm::event::{self, Event, KeyEvent, KeyEventKind},
     layout::{Constraint, Layout},
     widgets::{
        ScrollbarState, TableState
@@ -35,33 +35,6 @@ fn main() -> Result<()> {
     tui::restore()?;
     Ok(())
 }
-
-fn load_config() -> Result<Ini, Error> {
-    let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
-
-    let mut config = Ini::new();
-    if !file_path.exists() {
-        let _ = std::fs::create_dir_all(file_path.parent().unwrap());
-        let _ = std::fs::write(file_path.clone(), "".as_bytes());
-
-        config.with_section(Some("Main".to_string()))
-            .set("start_url", "");
-
-        update_config(&mut config)?;
-    } else {
-        config = Ini::load_from_file(file_path.clone())?;
-    }
-
-    Ok(config)
-}
-
-fn update_config(config: &mut Ini) -> Result<(), Error> {
-    let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
-    config.write_to_file(file_path)?;
-    Ok(())
-}
-
-
 
 impl App {
     fn new() -> Self {
@@ -97,12 +70,38 @@ impl App {
             value_input: "".to_string(),
             currently_editing: false,
             token_prompt: "".to_string(),
+            current_page: CurrentPage::AccountList,
         }        
+    }
+
+    pub fn load_config(&mut self) -> Result<Ini, Error> {
+        let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
+    
+        let mut config = Ini::new();
+        if !file_path.exists() {
+            let _ = std::fs::create_dir_all(file_path.parent().unwrap());
+            let _ = std::fs::write(file_path.clone(), "".as_bytes());
+    
+            config.with_section(Some("Main".to_string()))
+                .set("start_url", "");
+    
+            self.update_config(&mut config)?;
+        } else {
+            config = Ini::load_from_file(file_path.clone())?;
+        }
+    
+        Ok(config)
+    }
+    
+    pub fn update_config(&mut self, config: &mut Ini) -> Result<(), Error> {
+        let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
+        config.write_to_file(file_path)?;
+        Ok(())
     }
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {   
-        let config = load_config()?;    
+        let config = self.load_config()?;    
 
         self.start_url = config.get_from(Some("Main"), "start_url").unwrap().to_string();        
 
@@ -168,9 +167,11 @@ impl App {
         ).split(frame.size()); 
 
         if self.currently_editing {
+            self.current_page = CurrentPage::Config;
             widgets::render_config(frame, self, rects[0]);
         } else {
             if self.role_is_selected {
+                self.current_page = CurrentPage::Credentials;
                 widgets::render_credentials(frame, self, rects[0]);
             } else {
                 if self.is_selected {
@@ -180,8 +181,10 @@ impl App {
                         ]
                     ).split(frame.size());
                 }
+                self.current_page = CurrentPage::AccountList;
                 widgets::render_accounts(frame,  self, rects[0]);
                 if self.is_selected {
+                    self.current_page = CurrentPage::Roles;
                     widgets::render_roles(frame, self, rects[1]);
                 }
             }
@@ -201,83 +204,22 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
-        if self.currently_editing {
-            match key_event.code {
-                KeyCode::Enter => {
-                    self.start_url = self.value_input.clone();
-                    self.currently_editing = false;
-                    let mut config = load_config()?;
-                    config.with_section(Some("Main".to_string()))
-                        .set("start_url", self.start_url.clone());
-                    update_config(&mut config)?;
-                    self.load_aws_config(Some(true));
-                    self.get_account_list();
-                },
-                KeyCode::Char(value) => {
-                    self.value_input.push(value);
-                },
-                KeyCode::Backspace => {
-                    self.value_input.pop();
-                },      
-                KeyCode::Esc => {
-                    self.currently_editing = false;
-                    self.exit();
-                },          
-                _ => {}
+        self.credential_message = "".to_string();
+        match self.current_page {
+            CurrentPage::AccountList => {
+                let _ = widgets::accounts::handle_key_events(self, key_event);
             }
-        } else {
-            self.credential_message = "".to_string();
-            match key_event.code {            
-                KeyCode::Char('q') => self.exit(),
-                KeyCode::Up => {
-                    if self.is_selected {
-                        self.previous_role()
-                    } else {
-                        self.previous()
-                    }
-                },
-                KeyCode::Down => {
-                    if self.is_selected {
-                        self.next_role()
-                    } else {
-                        self.next()
-                    }
-                },
-                KeyCode::Char('c') => {
-                    if !self.role_is_selected && !self.is_selected {
-                        self.currently_editing = true;
-                    }
-                    if self.role_is_selected {
-                        self.credential_message = "Opening AWS Console...".to_string();
-                        self.open_console()
-                    }
-                }
-                KeyCode::Right => {
-                    if self.is_selected {
-                        self.select_role();
-                    } else {
-                        self.select_account();
-                    }
-                },         
-                KeyCode::Char('e') => {
-                    if !self.currently_editing && !self.role_is_selected && !self.is_selected {
-                        self.start_url = "https://".to_string();
-                        self.currently_editing = true;
-                    } else if self.role_is_selected {
-                        let _ = self.export();
-                    }  
-                },
-                KeyCode::Left => {
-                    if self.role_is_selected {
-                        self.role_is_selected = false;
-                    } else if self.is_selected {
-                        self.is_selected = false;
-                        self.role_table_state.select(None);
-                    }
-                }
-                _ => {}
+            CurrentPage::Roles => {
+                let _ = widgets::roles::handle_key_events(self, key_event);
+            }
+            CurrentPage::Credentials => {
+                let _ = widgets::credentials::handle_key_events(self, key_event);
+            }
+            CurrentPage::Config => {
+                let _ = widgets::config::handle_key_events(self, key_event);
             }
         }
+
         Ok(())
     }
 

@@ -4,6 +4,14 @@ use ratatui::widgets::{
 
 use crate::sso::{ConfigProvider, RoleCredentials};
 
+#[derive(Clone)]
+pub enum CurrentPage{
+    AccountList,
+    Config,
+    Credentials,
+    Roles
+}
+
 #[derive(Default, Clone)]
 pub struct AccountRow {
     pub account_name: String,
@@ -29,6 +37,7 @@ pub struct App {
     pub value_input: String,
     pub currently_editing: bool,
     pub token_prompt: String,
+    pub current_page: CurrentPage,
 }
 
 impl Default for App {
@@ -50,6 +59,7 @@ impl Default for App {
             value_input: String::new(),
             currently_editing: false,
             token_prompt: String::new(),
+            current_page: CurrentPage::AccountList,
         }
     }
 }

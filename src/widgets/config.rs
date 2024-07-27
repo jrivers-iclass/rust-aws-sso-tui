@@ -1,15 +1,41 @@
 use ratatui::{    
-    layout::{Alignment, Constraint, Rect},
-    style::{Style, Stylize},
-    symbols::border,
-    text::Line,
-    widgets::{
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Constraint, Rect}, style::{Style, Stylize}, symbols::border, text::Line, widgets::{
         block::{Position, Title}, Block, Row, Table
-    },
-    Frame,
+    }, Frame
 };
 
 use crate::app::App;
+
+pub fn handle_key_events(app: &mut App, key: KeyEvent) -> Result<(), anyhow::Error>{
+    match key.code {
+        KeyCode::Enter => {
+            app.start_url = app.value_input.clone();
+            app.currently_editing = false;
+            let mut config = app.load_config().unwrap();
+            config.with_section(Some("Main".to_string()))
+                .set("start_url", app.start_url.clone());
+            app.update_config(&mut config).map_err(|err| {
+                anyhow::anyhow!("Failed to update config: {}", err)
+            })?;
+            app.load_aws_config(Some(true));
+            app.get_account_list();
+            app.current_page = crate::app::CurrentPage::AccountList;
+        },
+        KeyCode::Char(value) => {
+            app.value_input.push(value);
+        },
+        KeyCode::Backspace => {
+            app.value_input.pop();
+        },      
+        KeyCode::Esc => {
+            app.currently_editing = false;
+            app.exit();
+        },          
+        _ => {}
+    }
+
+    Ok(())
+}
 
 pub fn render_config(f: &mut Frame, app: &mut App, area: Rect) {   
     let instructions = Title::from(Line::from(vec![

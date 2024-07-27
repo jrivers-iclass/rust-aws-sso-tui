@@ -1,15 +1,35 @@
 use ratatui::{    
-    layout::{Alignment, Constraint, Rect},
-    style::{Style, Stylize},
-    symbols::border,
-    text::Line,
-    widgets::{
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Constraint, Rect}, style::{Style, Stylize}, symbols::border, text::Line, widgets::{
         block::{Position, Title}, Block, Cell, Row, Table
-    },
-    Frame,
+    }, Frame
 };
 
 use crate::app::App;
+
+pub fn handle_key_events(app: &mut App, key: KeyEvent) -> Result<(), ()>{
+    match key.code {
+        KeyCode::Down => {
+            app.next_role();
+        }
+        KeyCode::Up => {
+            app.previous_role();
+        }
+        KeyCode::Left => {
+            app.is_selected = false;
+            app.current_page = crate::app::CurrentPage::AccountList;
+        }
+        KeyCode::Right => {
+            app.select_role();
+            app.current_page = crate::app::CurrentPage::Credentials;
+        }        
+        KeyCode::Char('q') => {
+            app.exit = true;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
 
 pub fn render_roles(f: &mut Frame, app: &mut App, area: Rect) {
     let instructions = Title::from(Line::from(vec![
