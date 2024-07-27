@@ -176,7 +176,7 @@ pub async fn open_console(account: AccountInfo, role: &str) -> Result<(), anyhow
     } else if cfg!(target_os = "macos") {
         // For macOS
         Command::new("open")
-            .args(&["-a", "Firefox", "--args", "--new-instance", "--profile", profile_path_str, &federated_url])
+            .args(&["-na", "Firefox", "--args", "--new-instance", "--profile", profile_path_str, &federated_url])
             .status()
             .expect("failed to open browser");
     } else if cfg!(target_os = "linux") {
