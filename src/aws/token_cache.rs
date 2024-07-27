@@ -36,24 +36,3 @@ impl AccessTokenCache {
         format!("{:02x}", hasher.finalize())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    // use super::*;
-
-    #[test]
-    fn should_return_some_cached_tokens() {
-        // let cache = AccessTokenCache::new("./test_data");
-        // let start_url = String::from("https://sso-start.awssso.aws/start");
-        // let result = cache.has_access_token("eu-west-1", &start_url);
-
-        // let expected_token = AccessToken {
-        //     start_url: start_url,
-        //     access_token: String::from("1234567890"),
-        //     refresh_token: String::from("0987654321"),
-        //     expires_in: 12345,
-        // };
-
-        // assert_eq!(result, Some(expected_token))
-    }
-}

@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AccessToken {
     pub start_url: String,
@@ -26,7 +26,7 @@ impl AccessToken {
     }    
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceClient {
     pub client_id: String,
@@ -46,7 +46,7 @@ pub struct SsoAccessTokenProvider {
 }
 
 impl SsoAccessTokenProvider {
-    const CLIENT_NAME: &'static str = "aws-sso";
+    const CLIENT_NAME: &'static str = "rust-tui";
     const DEVICE_GRANT_TYPE: &'static str = "urn:ietf:params:oauth:grant-type:device_code";
     const REFRESH_GRANT_TYPE: &'static str = "refresh_token";
 

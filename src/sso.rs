@@ -2,7 +2,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time;
 use std::{fs, path::PathBuf, process::Command};
-use crate::aws::{session_name, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider};
+use crate::aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider};
 use aws_config::{BehaviorVersion, Region};
 use directories::UserDirs;
 
@@ -14,8 +14,24 @@ pub struct RoleCredentials {
     pub expiration: String,
 }
 
+#[derive(Clone)]
+pub struct ConfigProvider {
+    access_token: AccessToken,
+    account_info_provider: Option<AccountInfoProvider>,
+}
+
+impl Default for ConfigProvider {
+    fn default() -> Self {
+        ConfigProvider {
+            access_token: AccessToken::default(),
+            account_info_provider: None,
+        }
+    }
+}
+
 #[::tokio::main]
-pub async fn get_sso_accounts() -> Result<Vec<AccountInfo>, anyhow::Error> {
+pub async fn get_aws_config() -> Result<ConfigProvider, anyhow::Error> {
+    // TODO: Implement a function to configure the start_url
     let start_url = "https://iclasspro.awsapps.com/start";
     let user_dirs = UserDirs::new().expect("Could not resolve user HOME.");
     let home_dir = user_dirs.home_dir();
@@ -26,13 +42,20 @@ pub async fn get_sso_accounts() -> Result<Vec<AccountInfo>, anyhow::Error> {
         .behavior_version(BehaviorVersion::latest())
         .build();
 
-    let account_info_provider = AccountInfoProvider::new(&config);
     let session_name = session_name(&start_url);
     let token_provider = SsoAccessTokenProvider::new(&config, session_name.as_str(), &aws_config_dir)?;
     let access_token = token_provider.get_access_token(&start_url).await?;
 
-    let mut sso_accounts = account_info_provider
-        .get_account_list(&access_token)
+    Ok(ConfigProvider {
+        access_token: access_token,
+        account_info_provider: Some(AccountInfoProvider::new(&config)),
+    })
+}
+
+#[::tokio::main]
+pub async fn get_sso_accounts(config_provider: ConfigProvider) -> Result<Vec<AccountInfo>, anyhow::Error> {
+    let mut sso_accounts = config_provider.account_info_provider.unwrap()
+        .get_account_list(&config_provider.access_token)
         .await?;
     
     sso_accounts.sort();
@@ -41,47 +64,18 @@ pub async fn get_sso_accounts() -> Result<Vec<AccountInfo>, anyhow::Error> {
 }
 
 #[::tokio::main]
-pub async fn get_account_roles(account: AccountInfo) -> Result<Vec<String>, anyhow::Error> {
-    time::sleep(time::Duration::from_millis(100)).await;
-    let start_url = "https://iclasspro.awsapps.com/start";
-    let user_dirs = UserDirs::new().expect("Could not resolve user HOME.");
-    let home_dir = user_dirs.home_dir();
-    let aws_config_dir = home_dir.join(".aws");
-
-    let config = aws_config::SdkConfig::builder()
-        .region(Some(Region::new("us-east-1")))
-        .behavior_version(BehaviorVersion::latest())
-        .build();
-
-    let account_info_provider = AccountInfoProvider::new(&config);
-    let session_name = session_name(&start_url);
-    let token_provider = SsoAccessTokenProvider::new(&config, session_name.as_str(), &aws_config_dir)?;
-    let access_token = token_provider.get_access_token(&start_url).await?;
-    let roles = account_info_provider.get_roles_for_account(&access_token, &account).await?;
+pub async fn get_account_roles(config_provider: ConfigProvider, account: AccountInfo) -> Result<Vec<String>, anyhow::Error> {
+    time::sleep(time::Duration::from_millis(100)).await;    
+    let roles = config_provider.account_info_provider.unwrap().get_roles_for_account(&config_provider.access_token, &account).await?;
     
     Ok(roles)
 }
 
 #[::tokio::main]
-pub async fn get_account_role_credentials(account: AccountInfo, role: &str) -> Result<RoleCredentials, anyhow::Error> {
-    time::sleep(time::Duration::from_millis(100)).await;
-    let start_url = "https://iclasspro.awsapps.com/start";
-    let user_dirs = UserDirs::new().expect("Could not resolve user HOME.");
-    let home_dir = user_dirs.home_dir();
-    let aws_config_dir = home_dir.join(".aws");
-
-    let config = aws_config::SdkConfig::builder()
-        .region(Some(Region::new("us-east-1")))
-        .behavior_version(BehaviorVersion::latest())
-        .build();
-
-    let account_info_provider = AccountInfoProvider::new(&config);
-    let session_name = session_name(&start_url);
-    let token_provider = SsoAccessTokenProvider::new(&config, session_name.as_str(), &aws_config_dir)?;
-    let access_token = token_provider.get_access_token(&start_url).await?;
-    
+pub async fn get_account_role_credentials(config_provider: ConfigProvider, account: AccountInfo, role: &str) -> Result<RoleCredentials, anyhow::Error> {
+    time::sleep(time::Duration::from_millis(100)).await;        
     // Get credentials for the role
-    let role_credentials_output = account_info_provider.get_role_credentials(&access_token, &account, role).await?;
+    let role_credentials_output = config_provider.account_info_provider.unwrap().get_role_credentials(&config_provider.access_token, &account, role).await?;
     let role_credentials = role_credentials_output.role_credentials().unwrap();
 
     Ok( RoleCredentials {
@@ -92,12 +86,12 @@ pub async fn get_account_role_credentials(account: AccountInfo, role: &str) -> R
     })
 }
 
-#[allow(non_snake_case)]
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SessionData {
-    sessionId: String,
-    sessionKey: String,
-    sessionToken: String
+    session_id: String,
+    session_key: String,
+    session_token: String
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,31 +101,13 @@ struct ContainerUrl {
 }
 
 #[::tokio::main]
-pub async fn open_console(account: AccountInfo, role: &str) -> Result<(), anyhow::Error> {
+pub async fn open_console(role_credentials: RoleCredentials, account: AccountInfo, role: &str) -> Result<(), anyhow::Error> {
     time::sleep(time::Duration::from_millis(100)).await;
-    let start_url = "https://iclasspro.awsapps.com/start";
-    let user_dirs = UserDirs::new().expect("Could not resolve user HOME.");
-    let home_dir = user_dirs.home_dir();
-    let aws_config_dir = home_dir.join(".aws");
-
-    let config = aws_config::SdkConfig::builder()
-        .region(Some(Region::new("us-east-1")))
-        .behavior_version(BehaviorVersion::latest())
-        .build();
-
-    let account_info_provider = AccountInfoProvider::new(&config);
-    let session_name = session_name(&start_url);
-    let token_provider = SsoAccessTokenProvider::new(&config, session_name.as_str(), &aws_config_dir)?;
-    let access_token = token_provider.get_access_token(&start_url).await?;
     
-    // Get credentials for the role
-    let role_credentials_output = account_info_provider.get_role_credentials(&access_token, &account, role).await?;
-    let role_credentials = role_credentials_output.role_credentials().unwrap();
-
     let session_data = SessionData {
-        sessionId: role_credentials.access_key_id().unwrap().to_string(),
-        sessionKey: role_credentials.secret_access_key().unwrap().to_string(),
-        sessionToken: role_credentials.session_token().unwrap().to_string(),
+        session_id: role_credentials.access_key_id.to_string(),
+        session_key: role_credentials.secret_access_key.to_string(),
+        session_token: role_credentials.session_token.to_string(),
     };
 
     let aws_federated_signin_endpoint = "https://signin.aws.amazon.com/federation";

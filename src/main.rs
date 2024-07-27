@@ -22,6 +22,7 @@ mod widgets;
 mod app;
 
 use app::*;
+use sso::ConfigProvider;
 
 const ITEM_HEIGHT: usize = 4;
 
@@ -62,12 +63,18 @@ impl App {
             },
             role_is_selected: false,
             credential_message: "".to_string(),
+            aws_config_provider: sso::ConfigProvider::default(),
         }        
     }
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {   
-        let sso_accounts = sso::get_sso_accounts();
+        self.aws_config_provider = match sso::get_aws_config() {
+            Ok(access_token) => access_token,
+            Err(_) => ConfigProvider::default(),
+        };
+
+        let sso_accounts = sso::get_sso_accounts(self.aws_config_provider.clone());
         self.rows = vec![];
         match sso_accounts {
             Ok(sso_accounts) => {          
@@ -184,7 +191,7 @@ impl App {
                 account_id: self.selected_account.account_id.clone(),
                 roles: vec![],
             };
-            let _ = sso::open_console(account_info, &self.selected_role);
+            let _ = sso::open_console(self.role_credentials.clone(), account_info, &self.selected_role);
             self.credential_message += "Done!";
         }
         ()
@@ -221,7 +228,7 @@ impl App {
             account_id: self.selected_account.account_id.clone(),
             roles: vec![],
         };
-        let roles = match sso::get_account_roles(account_info) {
+        let roles = match sso::get_account_roles(self.aws_config_provider.clone(), account_info) {
             Ok(roles) => roles,
             Err(err) => vec![err.to_string()],
         };
@@ -237,7 +244,7 @@ impl App {
             roles: vec![],
         };
         let role = self.selected_role.clone();
-        let role_credentials = match sso::get_account_role_credentials(account_info, &role) {
+        let role_credentials = match sso::get_account_role_credentials(self.aws_config_provider.clone(), account_info, &role) {
             Ok(role_credentials) => role_credentials,
             Err(err) => sso::RoleCredentials {
                 access_key_id: "".to_string(),

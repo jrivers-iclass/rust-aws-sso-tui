@@ -17,6 +17,7 @@ impl Display for AccountInfo {
     }
 }
 
+#[derive(Clone)]
 pub struct AccountInfoProvider {
     client: Client
 }
