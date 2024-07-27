@@ -1,7 +1,6 @@
 use anyhow::Error;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tokio::time;
 use std::{fs, path::PathBuf, process::{Command, Stdio}};
 use crate::{aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider}, App};
 use aws_config::{BehaviorVersion, Region};
@@ -73,15 +72,13 @@ pub async fn get_sso_accounts(config_provider: ConfigProvider) -> Result<Vec<Acc
 
 #[::tokio::main]
 pub async fn get_account_roles(config_provider: ConfigProvider, account: AccountInfo) -> Result<Vec<String>, anyhow::Error> {
-    time::sleep(time::Duration::from_millis(100)).await;    
     let roles = config_provider.account_info_provider.unwrap().get_roles_for_account(&config_provider.access_token, &account).await?;
     
     Ok(roles)
 }
 
 #[::tokio::main]
-pub async fn get_account_role_credentials(config_provider: ConfigProvider, account: AccountInfo, role: &str) -> Result<RoleCredentials, anyhow::Error> {
-    time::sleep(time::Duration::from_millis(100)).await;        
+pub async fn get_account_role_credentials(config_provider: ConfigProvider, account: AccountInfo, role: &str) -> Result<RoleCredentials, anyhow::Error> {     
     // Get credentials for the role
     let role_credentials_output = config_provider.account_info_provider.unwrap().get_role_credentials(&config_provider.access_token, &account, role).await?;
     let role_credentials = role_credentials_output.role_credentials().unwrap();
@@ -110,8 +107,6 @@ struct ContainerUrl {
 
 #[::tokio::main]
 pub async fn open_console(role_credentials: RoleCredentials, account: AccountInfo, role: &str) -> Result<(), anyhow::Error> {
-    time::sleep(time::Duration::from_millis(100)).await;
-    
     let session_data = SessionData {
         session_id: role_credentials.access_key_id.to_string(),
         session_key: role_credentials.secret_access_key.to_string(),
@@ -220,7 +215,6 @@ pub fn export_env_vars(credentials: &RoleCredentials) -> Result<(), anyhow::Erro
     Ok(())
 
 }
-
 
 fn create_firefox_profile(profile_name: &str) -> PathBuf {
     let user_dirs = UserDirs::new().expect("Could not find user directories");
