@@ -1,10 +1,16 @@
+use std::rc::Rc;
+
 use ratatui::{    
-    crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Constraint, Rect}, style::{Style, Stylize}, symbols::border, text::Line, widgets::{
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Constraint, Layout, Rect}, style::{Style, Stylize}, symbols::border, text::Line, widgets::{
         block::{Position, Title}, Block, Row, Table
     }, Frame
 };
 
 use crate::app::App;
+
+pub fn get_layout(f: &mut Frame) -> Rc<[Rect]> {
+    Layout::horizontal([Constraint::Min(5)]).split(f.size())
+}
 
 pub fn handle_key_events(app: &mut App, key: KeyEvent) -> Result<(), anyhow::Error>{
     match key.code {

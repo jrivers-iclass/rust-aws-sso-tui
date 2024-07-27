@@ -1,12 +1,11 @@
+use std::collections::HashMap;
+
 use aws::AccountInfo;
 use directories::UserDirs;
 use ini::Ini;
 use ratatui::{
     crossterm::event::{self, Event, KeyEvent, KeyEventKind},
-    layout::{Constraint, Layout},
-    widgets::{
-       ScrollbarState, TableState
-    },
+    layout::{Constraint, Layout},   
     Frame,
 };
 
@@ -31,49 +30,12 @@ const ITEM_HEIGHT: usize = 4;
 fn main() -> Result<()> {
     errors::install_hooks()?;  
     let mut terminal = tui::init()?;
-    App::new().run(&mut terminal)?;
+    App::default().run(&mut terminal)?;
     tui::restore()?;
     Ok(())
 }
 
-impl App {
-    fn new() -> Self {
-        let mut rows = Vec::new();
-        rows.push(AccountRow {
-            account_name: "Loading...".to_string(),
-            account_id: "".to_string(),
-            roles: vec![],
-        });        
-        Self {
-            table_state: TableState::default(),
-            scroll_state: ScrollbarState::default(),
-            exit: false,
-            rows: rows,
-            selected_account: AccountRow {
-                account_name: "".to_string(),
-                account_id: "".to_string(),
-                roles: vec![],
-            },
-            is_selected: false,
-            role_table_state: TableState::default(),
-            selected_role: "".to_string(),
-            role_credentials: sso::RoleCredentials {
-                access_key_id: "".to_string(),
-                secret_access_key: "".to_string(),
-                session_token: "".to_string(),
-                expiration: "".to_string(),
-            },
-            role_is_selected: false,
-            credential_message: "".to_string(),
-            aws_config_provider: sso::ConfigProvider::default(),
-            start_url: "".to_string(),
-            value_input: "".to_string(),
-            currently_editing: false,
-            token_prompt: "".to_string(),
-            current_page: CurrentPage::AccountList,
-        }        
-    }
-
+impl App {    
     pub fn load_config(&mut self) -> Result<Ini, Error> {
         let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
     
@@ -101,6 +63,7 @@ impl App {
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {   
+        self.routes = self.create_routes();
         let config = self.load_config()?;    
 
         self.start_url = config.get_from(Some("Main"), "start_url").unwrap().to_string();        
@@ -159,39 +122,63 @@ impl App {
         }
     }
 
-    fn render_frame(&mut self, frame: &mut Frame) {       
-        let mut rects = Layout::vertical([
-            Constraint::Min(5), 
-            Constraint::Min(5)
-            ]
-        ).split(frame.size()); 
-
+    fn render_frame(&mut self, frame: &mut Frame) {        
         if self.currently_editing {
-            self.current_page = CurrentPage::Config;
-            widgets::render_config(frame, self, rects[0]);
+            self.route(frame, CurrentPage::Config);
+        } else if self.role_is_selected {
+            self.route(frame,CurrentPage::Credentials);
+        } else if self.is_selected {
+            self.route(frame,CurrentPage::Roles);
         } else {
-            if self.role_is_selected {
-                self.current_page = CurrentPage::Credentials;
-                widgets::render_credentials(frame, self, rects[0]);
-            } else {
-                if self.is_selected {
-                    rects = Layout::horizontal([
-                        Constraint::Min(5), 
-                        Constraint::Min(5)
-                        ]
-                    ).split(frame.size());
-                }
-                self.current_page = CurrentPage::AccountList;
-                widgets::render_accounts(frame,  self, rects[0]);
-                if self.is_selected {
-                    self.current_page = CurrentPage::Roles;
-                    widgets::render_roles(frame, self, rects[1]);
-                }
-            }
+            self.route(frame,CurrentPage::AccountList);
         }
     }
 
-    /// updates the application's state based on user input
+    fn route(&mut self, frame: &mut Frame, page: CurrentPage) {
+        if let Some(route) = self.routes.get(&page) {
+            let rects = (route.layout)(frame);
+            (route.render)(frame, self, rects[0]);
+            self.current_page = page;
+        }
+    }
+
+    fn create_routes(&mut self) -> HashMap<CurrentPage, RouteConfig> {
+        let mut routes = HashMap::new();
+
+        // Config route
+        routes.insert(CurrentPage::Config, RouteConfig {
+            layout: |frame| widgets::config::get_layout(frame),
+            render: |frame, mut app, rect| widgets::render_config(frame, &mut app, rect),
+        });
+
+        // Credentials route
+        routes.insert(CurrentPage::Credentials, RouteConfig {
+            layout: |frame| widgets::credentials::get_layout(frame),
+            render: |frame, mut app, rect| widgets::render_credentials(frame, &mut app, rect),
+        });
+
+        // AccountList route
+        routes.insert(CurrentPage::AccountList, RouteConfig {
+            layout: |frame| widgets::accounts::get_layout(frame),
+            render: |frame, mut app, rect| widgets::render_accounts(frame, &mut app, rect),
+        });
+
+        // Roles route
+        routes.insert(CurrentPage::Roles, RouteConfig {
+            layout: |frame| widgets::roles::get_layout(frame),
+            render: |frame, mut app, rect| {
+                widgets::render_accounts(frame, &mut app, rect);
+                if app.is_selected {
+                    let rects = widgets::roles::get_layout(frame);
+                    widgets::render_roles(frame, &mut app, rects[1]);
+                }
+            },
+        });
+
+        routes
+    }
+
+    /// updates the application's self based on user input
     fn handle_events(&mut self) -> Result<()> {
         match event::read()? {
             // it's important to check that the event is a key press event as

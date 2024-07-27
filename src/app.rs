@@ -1,15 +1,23 @@
-use ratatui::widgets::{
+use std::{collections::HashMap, rc::Rc};
+
+use ratatui::{layout::Rect, widgets::{
         ScrollbarState, TableState,
-    };
+    }, Frame};
 
 use crate::sso::{ConfigProvider, RoleCredentials};
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub enum CurrentPage{
     AccountList,
     Config,
     Credentials,
     Roles
+}
+
+#[derive(Clone)]
+pub struct RouteConfig {
+    pub layout: fn(&mut Frame) -> Rc<[Rect]>,
+    pub render: fn(&mut Frame, &mut App, Rect),
 }
 
 #[derive(Default, Clone)]
@@ -38,6 +46,7 @@ pub struct App {
     pub currently_editing: bool,
     pub token_prompt: String,
     pub current_page: CurrentPage,
+    pub routes: HashMap<CurrentPage, RouteConfig>,
 }
 
 impl Default for App {
@@ -60,6 +69,7 @@ impl Default for App {
             currently_editing: false,
             token_prompt: String::new(),
             current_page: CurrentPage::AccountList,
+            routes: HashMap::new(),
         }
     }
 }
