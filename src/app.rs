@@ -25,6 +25,10 @@ pub struct App {
     pub role_credentials: RoleCredentials,
     pub credential_message: String,
     pub aws_config_provider: ConfigProvider,
+    pub start_url: String,
+    pub value_input: String,
+    pub currently_editing: bool,
+    pub token_prompt: String,
 }
 
 impl Default for App {
@@ -42,6 +46,10 @@ impl Default for App {
             role_credentials: RoleCredentials::default(),
             credential_message: String::new(),
             aws_config_provider: ConfigProvider::default(),
+            start_url: String::new(),
+            value_input: String::new(),
+            currently_editing: false,
+            token_prompt: String::new(),
         }
     }
 }

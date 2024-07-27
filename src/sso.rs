@@ -1,8 +1,9 @@
+use anyhow::Error;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time;
 use std::{fs, path::PathBuf, process::{Command, Stdio}};
-use crate::aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider};
+use crate::{aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider}, App};
 use aws_config::{BehaviorVersion, Region};
 use directories::UserDirs;
 use std::io::Write;
@@ -17,8 +18,8 @@ pub struct RoleCredentials {
 
 #[derive(Clone)]
 pub struct ConfigProvider {
-    access_token: AccessToken,
-    account_info_provider: Option<AccountInfoProvider>,
+    pub access_token: AccessToken,
+    pub account_info_provider: Option<AccountInfoProvider>,
 }
 
 impl Default for ConfigProvider {
@@ -31,9 +32,10 @@ impl Default for ConfigProvider {
 }
 
 #[::tokio::main]
-pub async fn get_aws_config() -> Result<ConfigProvider, anyhow::Error> {
-    // TODO: Implement a function to configure the start_url
-    let start_url = "https://iclasspro.awsapps.com/start";
+pub async fn get_aws_config(start_url: &str, app: &mut App, new_token: Option<bool>) -> Result<ConfigProvider, anyhow::Error> {
+    if start_url.is_empty() {
+        return Err(Error::msg("SSO Start URL is required"));
+    }
     let user_dirs = UserDirs::new().expect("Could not resolve user HOME.");
     let home_dir = user_dirs.home_dir();
     let aws_config_dir = home_dir.join(".aws");
@@ -45,12 +47,17 @@ pub async fn get_aws_config() -> Result<ConfigProvider, anyhow::Error> {
 
     let session_name = session_name(&start_url);
     let token_provider = SsoAccessTokenProvider::new(&config, session_name.as_str(), &aws_config_dir)?;
-    let access_token = token_provider.get_access_token(&start_url).await?;
+    let access_token = token_provider.get_access_token(&start_url, new_token.unwrap_or(false), app).await;
 
-    Ok(ConfigProvider {
-        access_token: access_token,
-        account_info_provider: Some(AccountInfoProvider::new(&config)),
-    })
+    match access_token {
+        Ok(token) => {
+            Ok(ConfigProvider {
+                access_token: token,
+                account_info_provider: Some(AccountInfoProvider::new(&config)),
+            })
+        }
+        Err(e) => Err(e),
+    }
 }
 
 #[::tokio::main]

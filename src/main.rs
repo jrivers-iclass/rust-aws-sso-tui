@@ -1,4 +1,6 @@
 use aws::AccountInfo;
+use directories::UserDirs;
+use ini::Ini;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     layout::{Constraint, Layout},
@@ -9,7 +11,7 @@ use ratatui::{
 };
 
 use color_eyre::{
-    eyre::WrapErr,
+    eyre::{Error, WrapErr},
     Result,
 };
 
@@ -27,12 +29,39 @@ use sso::ConfigProvider;
 const ITEM_HEIGHT: usize = 4;
 
 fn main() -> Result<()> {
-    errors::install_hooks()?;
+    errors::install_hooks()?;  
     let mut terminal = tui::init()?;
     App::new().run(&mut terminal)?;
     tui::restore()?;
     Ok(())
 }
+
+fn load_config() -> Result<Ini, Error> {
+    let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
+
+    let mut config = Ini::new();
+    if !file_path.exists() {
+        let _ = std::fs::create_dir_all(file_path.parent().unwrap());
+        let _ = std::fs::write(file_path.clone(), "".as_bytes());
+
+        config.with_section(Some("Main".to_string()))
+            .set("start_url", "");
+
+        update_config(&mut config)?;
+    } else {
+        config = Ini::load_from_file(file_path.clone())?;
+    }
+
+    Ok(config)
+}
+
+fn update_config(config: &mut Ini) -> Result<(), Error> {
+    let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
+    config.write_to_file(file_path)?;
+    Ok(())
+}
+
+
 
 impl App {
     fn new() -> Self {
@@ -64,41 +93,71 @@ impl App {
             role_is_selected: false,
             credential_message: "".to_string(),
             aws_config_provider: sso::ConfigProvider::default(),
+            start_url: "".to_string(),
+            value_input: "".to_string(),
+            currently_editing: false,
+            token_prompt: "".to_string(),
         }        
     }
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {   
-        self.aws_config_provider = match sso::get_aws_config() {
-            Ok(access_token) => access_token,
-            Err(_) => ConfigProvider::default(),
-        };
+        let config = load_config()?;    
 
-        let sso_accounts = sso::get_sso_accounts(self.aws_config_provider.clone());
-        self.rows = vec![];
-        match sso_accounts {
-            Ok(sso_accounts) => {          
-                for account in sso_accounts {
-                    self.rows.push(AccountRow {
-                        account_name: account.account_name,
-                        account_id: account.account_id,
-                        roles: account.roles,
-                    });
-                } 
-            }
-            Err(err) => {
-                self.rows.push(AccountRow {
-                    account_name: "Error".to_string(),
-                    account_id: err.to_string(),
-                    roles: vec![],
-                });
-            }
-        }                
+        self.start_url = config.get_from(Some("Main"), "start_url").unwrap().to_string();        
+
+        if self.start_url.is_empty() {
+            self.currently_editing = true;
+        }  
+
+        self.load_aws_config(Some(false));      
+
+        self.get_account_list()        ;
+                      
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
             self.handle_events().wrap_err("handle events failed")?;
         }
         Ok(())
+    }
+
+    fn load_aws_config(&mut self, new_token: Option<bool>) {
+        self.aws_config_provider = match sso::get_aws_config(self.start_url.clone().as_str(), self, Some(new_token.unwrap_or(false))) {
+            Ok(access_token) => access_token,
+            Err(_) => ConfigProvider::default(),
+        };
+    }
+
+    fn get_account_list(&mut self) {
+        if !self.aws_config_provider.account_info_provider.is_none() {
+            let sso_accounts = sso::get_sso_accounts(self.aws_config_provider.clone());
+            self.rows = vec![];
+            match sso_accounts {
+                Ok(sso_accounts) => {          
+                    for account in sso_accounts {
+                        self.rows.push(AccountRow {
+                            account_name: account.account_name,
+                            account_id: account.account_id,
+                            roles: account.roles,
+                        });
+                    } 
+                }
+                Err(err) => {
+                    self.rows.push(AccountRow {
+                        account_name: "Error".to_string(),
+                        account_id: err.to_string(),
+                        roles: vec![],
+                    });
+                }
+            }  
+        } else {
+            self.rows = vec![];
+            self.rows.push(AccountRow {
+                account_name: "Error".to_string(),
+                account_id: "No AWS Config Provider".to_string(),
+                roles: vec![],
+            });
+        }
     }
 
     fn render_frame(&mut self, frame: &mut Frame) {       
@@ -107,22 +166,26 @@ impl App {
             Constraint::Min(5)
             ]
         ).split(frame.size()); 
-        if self.role_is_selected {
-            widgets::render_credentials(frame, self, rects[0]);
+
+        if self.currently_editing {
+            widgets::render_config(frame, self, rects[0]);
         } else {
-            if self.is_selected {
-                rects = Layout::horizontal([
-                    Constraint::Min(5), 
-                    Constraint::Min(5)
-                    ]
-                ).split(frame.size());
-            }
-            widgets::render_accounts(frame,  self, rects[0]);
-            if self.is_selected {
-                widgets::render_roles(frame, self, rects[1]);
+            if self.role_is_selected {
+                widgets::render_credentials(frame, self, rects[0]);
+            } else {
+                if self.is_selected {
+                    rects = Layout::horizontal([
+                        Constraint::Min(5), 
+                        Constraint::Min(5)
+                        ]
+                    ).split(frame.size());
+                }
+                widgets::render_accounts(frame,  self, rects[0]);
+                if self.is_selected {
+                    widgets::render_roles(frame, self, rects[1]);
+                }
             }
         }
-
     }
 
     /// updates the application's state based on user input
@@ -138,48 +201,82 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
-        self.credential_message = "".to_string();
-        match key_event.code {            
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Up => {
-                if self.is_selected {
-                    self.previous_role()
-                } else {
-                    self.previous()
-                }
-            },
-            KeyCode::Down => {
-                if self.is_selected {
-                    self.next_role()
-                } else {
-                    self.next()
-                }
-            },
-            KeyCode::Char('c') => {
-                self.credential_message = "Opening AWS Console...".to_string();
-                self.open_console()
+        if self.currently_editing {
+            match key_event.code {
+                KeyCode::Enter => {
+                    self.start_url = self.value_input.clone();
+                    self.currently_editing = false;
+                    let mut config = load_config()?;
+                    config.with_section(Some("Main".to_string()))
+                        .set("start_url", self.start_url.clone());
+                    update_config(&mut config)?;
+                    self.load_aws_config(Some(true));
+                    self.get_account_list();
+                },
+                KeyCode::Char(value) => {
+                    self.value_input.push(value);
+                },
+                KeyCode::Backspace => {
+                    self.value_input.pop();
+                },      
+                KeyCode::Esc => {
+                    self.currently_editing = false;
+                    self.exit();
+                },          
+                _ => {}
             }
-            KeyCode::Right => {
-                if self.is_selected {
-                    self.select_role();
-                } else {
-                    self.select_account();
+        } else {
+            self.credential_message = "".to_string();
+            match key_event.code {            
+                KeyCode::Char('q') => self.exit(),
+                KeyCode::Up => {
+                    if self.is_selected {
+                        self.previous_role()
+                    } else {
+                        self.previous()
+                    }
+                },
+                KeyCode::Down => {
+                    if self.is_selected {
+                        self.next_role()
+                    } else {
+                        self.next()
+                    }
+                },
+                KeyCode::Char('c') => {
+                    if !self.role_is_selected && !self.is_selected {
+                        self.currently_editing = true;
+                    }
+                    if self.role_is_selected {
+                        self.credential_message = "Opening AWS Console...".to_string();
+                        self.open_console()
+                    }
                 }
-            },         
-            KeyCode::Char('e') => {
-                if self.role_is_selected {
-                    let _ = self.export();
+                KeyCode::Right => {
+                    if self.is_selected {
+                        self.select_role();
+                    } else {
+                        self.select_account();
+                    }
+                },         
+                KeyCode::Char('e') => {
+                    if !self.currently_editing && !self.role_is_selected && !self.is_selected {
+                        self.start_url = "https://".to_string();
+                        self.currently_editing = true;
+                    } else if self.role_is_selected {
+                        let _ = self.export();
+                    }  
+                },
+                KeyCode::Left => {
+                    if self.role_is_selected {
+                        self.role_is_selected = false;
+                    } else if self.is_selected {
+                        self.is_selected = false;
+                        self.role_table_state.select(None);
+                    }
                 }
-            },
-            KeyCode::Left => {
-                if self.role_is_selected {
-                    self.role_is_selected = false;
-                } else if self.is_selected {
-                    self.is_selected = false;
-                    self.role_table_state.select(None);
-                }
+                _ => {}
             }
-            _ => {}
         }
         Ok(())
     }

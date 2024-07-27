@@ -1,5 +1,5 @@
 use std::{path::Path, fs, io::Write};
-use crate::utils::serde::json_date_format;
+use crate::{utils::serde::json_date_format, App};
 use anyhow::{Result, anyhow};
 use aws_config::SdkConfig;
 use aws_sdk_ssooidc::Client;
@@ -65,24 +65,24 @@ impl SsoAccessTokenProvider {
         })
     }
 
-    pub async fn get_access_token(&self, start_url: &str) -> Result<AccessToken> {
-        let cached_token_option = self.cache.get_cached_token();
+    pub async fn get_access_token(&self, start_url: &str, new_token: bool, app: &mut App) -> Result<AccessToken> {        
+        let cached_token_option = self.cache.get_cached_token();        
 
         match cached_token_option {
             Ok(cached_token) => {
-                if cached_token.is_expired() {
-                    self.get_new_token(start_url).await
+                if cached_token.is_expired() || new_token {
+                    self.get_new_token(start_url, app).await
                 } else {
                     self.refresh_token(cached_token).await
                 }
             }
-            Err(_) => self.get_new_token(start_url).await,
+            Err(_) => self.get_new_token(start_url, app).await,
         }
     }
 
-    async fn get_new_token(&self, start_url: &str) -> Result<AccessToken> {
+    async fn get_new_token(&self, start_url: &str, app: &mut App) -> Result<AccessToken> {
         let device_client = self.register_device_client().await?;
-        self.authenticate(start_url, device_client).await
+        self.authenticate(start_url, device_client, app).await
     }
 
     async fn register_device_client(&self) -> Result<DeviceClient, anyhow::Error> {
@@ -107,7 +107,7 @@ impl SsoAccessTokenProvider {
         Ok(device_client)
     }
 
-    async fn authenticate(&self, start_url: &str, device_client: DeviceClient) -> Result<AccessToken> {
+    async fn authenticate(&self, start_url: &str, device_client: DeviceClient, app: &mut App) -> Result<AccessToken> {
         let auth_response = self
             .client
             .start_device_authorization()
@@ -119,7 +119,7 @@ impl SsoAccessTokenProvider {
 
         open::that(auth_response.verification_uri_complete().unwrap())?;
 
-        println!("\nVerify authorization code: \x1B[36;1m{}\x1B[0m", &auth_response.user_code().unwrap());
+        app.token_prompt = format!("Verify authorization code: {}", auth_response.user_code().unwrap());
 
         let interval = auth_response.interval();
         loop {
@@ -148,9 +148,7 @@ impl SsoAccessTokenProvider {
                         refresh_token: String::from(refresh_token),
                     };
 
-                    print!("\x1B[1A");
-                    print!("\x1B[2K");
-                    std::io::stdout().flush().unwrap();
+                    app.token_prompt = String::new();
 
                     break Ok(self.cache.cache_token(access_token)?);
                 }

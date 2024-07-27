@@ -26,9 +26,13 @@ pub fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
         "<Down>".blue().bold(),
         " Select Account ".into(),
         "<Right>".blue().bold(),
+        " Config ".into(),
+        "<C>".yellow().bold(),
         " Quit ".into(),
-        "<Q> ".blue().bold(),
+        "<Q> ".red().bold(),
     ]));
+
+    let url_title = Title::from(format!(" Start URL: {} ", app.start_url).bold());
 
     let account_list_title = Title::from(format!(" Accounts ({}) ", app.rows.len()).bold());        
     let account_list_block = Block::bordered()
@@ -36,7 +40,8 @@ pub fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
         .title(instructions
             .alignment(Alignment::Center)
             .position(Position::Bottom)
-        )        
+        )   
+        .title (url_title.alignment(Alignment::Right))     
         .border_set(border::THICK);
 
     let widths = [
@@ -51,7 +56,11 @@ pub fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
         ])
     });    
 
-    let binding = app.selected_account.clone();
+    let footer_row = Row::new(vec![
+        Cell::from("Selected Account:").style(Style::new().bold()),
+        Cell::from(app.selected_account.account_id.clone()).style(Style::new().bold().yellow())
+    ]);    
+
     let table = Table::new(rows, widths)
         .column_spacing(1)
         .style(style)
@@ -59,7 +68,7 @@ pub fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
             Row::new(vec!["Account Name", "Account ID"])
                 .style(Style::new().bold())                            
         )                                
-        .footer(Row::new(vec!["Selected Account", &binding.account_id]).bold().yellow())
+        .footer(footer_row)
         .block(account_list_block)
         .highlight_style(Style::new().reversed())
         .highlight_symbol(">>");
