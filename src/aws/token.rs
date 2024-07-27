@@ -1,4 +1,4 @@
-use std::{path::Path, fs, io::Write};
+use std::{path::Path, fs};
 use crate::{utils::serde::json_date_format, App};
 use anyhow::{Result, anyhow};
 use aws_config::SdkConfig;
