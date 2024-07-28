@@ -57,8 +57,9 @@ pub fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
         " Quit ".into(),
         "<Q> ".red().bold(),
     ]));
-
-    let url_title = Title::from(format!(" Start URL: {} ", app.start_url).bold());
+    
+    let start_url = app.config_options.options.iter().find(|option| option.name == "start_url").unwrap().value.clone();
+    let url_title = Title::from(format!(" Start URL: {} ", start_url).bold());
 
     let account_list_title = Title::from(format!(" Accounts ({}) ", app.rows.len()).bold());        
     let account_list_block = Block::bordered()

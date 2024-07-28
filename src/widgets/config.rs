@@ -6,7 +6,7 @@ use ratatui::{
     }, Frame
 };
 
-use crate::app::App;
+use crate::{app::App, ConfigOption};
 
 pub fn get_layout(f: &mut Frame) -> Rc<[Rect]> {
     Layout::horizontal([Constraint::Min(5)]).split(f.size())
@@ -15,23 +15,65 @@ pub fn get_layout(f: &mut Frame) -> Rc<[Rect]> {
 pub fn handle_key_events(app: &mut App, key: KeyEvent) -> Result<(), anyhow::Error>{
     match key.code {
         KeyCode::Enter => {
-            app.start_url = app.value_input.clone();
             app.currently_editing = false;
             let mut config = app.load_config().unwrap();
-            config.with_section(Some("Main".to_string()))
-                .set("start_url", app.start_url.clone());
+            app.config_options.options.iter().for_each(|option| {
+                config.with_section(Some("Main".to_string()))
+                    .set(option.name.clone(), option.value.clone());                
+            });
             app.update_config(&mut config).map_err(|err| {
                 anyhow::anyhow!("Failed to update config: {}", err)
-            })?;
+            })?;            
+
             app.load_aws_config(Some(true));
             app.get_account_list();
             app.current_page = crate::app::CurrentPage::AccountList;
         },
-        KeyCode::Char(value) => {
-            app.value_input.push(value);
+        KeyCode::Down => {
+            let i = match app.config_table_state.selected() {
+                Some(i) => {
+                    if i >= app.config_options.options.len() - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
+                }
+                None => 0,
+            };
+            app.config_table_state.select(Some(i));
+            app.value_input = app.config_options.options[i].value.clone();
+        },
+        KeyCode::Up => {
+            let i = match app.config_table_state.selected() {
+                Some(i) => {
+                    if i <= 0 {
+                        1
+                    } else {
+                        i - 1
+                    }
+                }
+                None => 0,
+            };
+            app.config_table_state.select(Some(i));
+            app.value_input = app.config_options.options[i].value.clone();
+        },
+        KeyCode::Char(value) => {            
+            let i = match app.config_table_state.selected() {
+                Some(i) => i,
+                None => 0,
+            };
+            if i > 0 {
+                app.config_options.options[i].value.push(value);
+            }
         },
         KeyCode::Backspace => {
-            app.value_input.pop();
+            let i = match app.config_table_state.selected() {
+                Some(i) => i,
+                None => 0,
+            };
+            if i > 0 {
+                app.config_options.options[i].value.pop();
+            }
         },      
         KeyCode::Esc => {
             app.currently_editing = false;
@@ -45,6 +87,10 @@ pub fn handle_key_events(app: &mut App, key: KeyEvent) -> Result<(), anyhow::Err
 
 pub fn render_config(f: &mut Frame, app: &mut App, area: Rect) {   
     let instructions = Title::from(Line::from(vec![
+        " Next ".into(),
+        "<Down>".blue().bold(),
+        " Previous ".into(),
+        "<Up>".blue().bold(),
         " Save ".into(),        
         "<Enter>".blue().bold(),       
         " Quit ".into(),
@@ -63,14 +109,10 @@ pub fn render_config(f: &mut Frame, app: &mut App, area: Rect) {
         Constraint::Min(10),
         Constraint::Min(10)
     ];
-    
-    if app.value_input.is_empty() {
-        app.value_input = app.start_url.clone();
-    }
 
-    let rows = vec![
-        Row::new(vec!["Start URL:", &app.value_input]),
-    ];
+    let rows = app.config_options.options.iter().map(|option: &ConfigOption| {
+        Row::new(vec![option.name.clone(), option.value.clone()])
+    });
 
     let mut footer_row = Row::new(vec!["", ""]);
     if !app.token_prompt.is_empty() {
@@ -90,5 +132,5 @@ pub fn render_config(f: &mut Frame, app: &mut App, area: Rect) {
         .highlight_style(Style::new().reversed())
         .highlight_symbol(">>");
 
-    f.render_widget(table, area);
+    f.render_stateful_widget(table, area, &mut app.config_table_state);
 }

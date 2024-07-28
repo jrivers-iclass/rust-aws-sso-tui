@@ -1,11 +1,11 @@
 use anyhow::Error;
+use ini::Ini;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, process::{Command, Stdio}};
-use crate::{aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider}, App};
+use std::{fs, path::PathBuf, process::Command};
+use crate::{aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider}, App, ConfigOption};
 use aws_config::{BehaviorVersion, Region};
 use directories::UserDirs;
-use std::io::Write;
 
 #[derive(Default, Clone)]
 pub struct RoleCredentials {
@@ -140,8 +140,7 @@ pub async fn open_console(role_credentials: RoleCredentials, account: AccountInf
         ("SigninToken", &signin_token)
     ];
 
-    let federated_url = format!("{}?{}", aws_federated_signin_endpoint, serde_urlencoded::to_string(&federated_params)?);    
-    // open::with_command(federated_url, "firefox");   
+    let federated_url = format!("{}?{}", aws_federated_signin_endpoint, serde_urlencoded::to_string(&federated_params)?);     
     let profile_name = format!("aws-sso-{}-{}", account.account_id, role);
     let profile_dir = create_firefox_profile(&profile_name);
     let profile_path_str = profile_dir.to_str().unwrap();
@@ -172,46 +171,30 @@ pub async fn open_console(role_credentials: RoleCredentials, account: AccountInf
     Ok(())
 }
 
-pub fn export_env_vars(credentials: &RoleCredentials) -> Result<(), anyhow::Error> {
-    if cfg!(target_os = "windows") {
-        let env_vars = vec![
-            format!("setx AWS_ACCESS_KEY_ID {}", &credentials.access_key_id),
-            format!("setx AWS_SECRET_ACCESS_KEY {}", &credentials.secret_access_key),
-            format!("setx AWS_SESSION_TOKEN {}", &credentials.session_token),
-        ];  
-        for env_var in env_vars {
-            let _ = Command::new("cmd")
-                .args(["/C", &env_var])
-                .output();
-        }
-    } else {
-        let env_vars = vec![
-            format!("export AWS_ACCESS_KEY_ID={}", &credentials.access_key_id),
-            format!("export AWS_SECRET_ACCESS_KEY={}", &credentials.secret_access_key),
-            format!("export AWS_SESSION_TOKEN={}", &credentials.session_token),
-        ];
+pub fn get_default_aws_path() -> PathBuf {
+    let user_dirs = UserDirs::new().expect("Could not find user directories");
+    let home_dir = user_dirs.home_dir();
+    let aws_config_dir = home_dir.join(".aws");
 
-        // let shell = if cfg!(target_os = "macos") { "zsh" } else { "bash" };
-        // for env_var in env_vars {
-        //     Command::new(shell)
-        //         .args(["-c", &env_var])
-        //         .output()
-        //         .expect("Failed to execute command");
-        // }
+    aws_config_dir
+}
 
-        let export_commands = env_vars.join("\n");
-        let mut pbcopy = Command::new("pbcopy")
-            .stdin(Stdio::piped())
-            .spawn()
-            .expect("Failed to start pbcopy");
-
-        {
-            let stdin = pbcopy.stdin.as_mut().expect("Failed to open stdin");
-            stdin.write_all(export_commands.as_bytes()).expect("Failed to write to pbcopy");
-        }
-
-        pbcopy.wait().expect("Failed to copy to clipboard");
+pub fn export_env_vars(credentials: &RoleCredentials, aws_config_path: ConfigOption) -> Result<(), anyhow::Error> {
+    let file_path =&PathBuf::from(&aws_config_path.value).join("credentials");
+    
+    let mut config = Ini::new();
+    if !file_path.exists() {
+        let _ = std::fs::create_dir_all(file_path.parent().unwrap());
+        let _ = std::fs::write(file_path, "".as_bytes());        
     }
+
+    config.with_section(Some("default".to_string()))
+            .set("AWS_ACCESS_KEY_ID", &credentials.access_key_id)
+            .set("AWS_SECRET_ACCESS_KEY", &credentials.secret_access_key)
+            .set("AWS_SESSION_TOKEN", &credentials.session_token);
+
+    let _ = config.write_to_file(file_path.clone());
+        
     Ok(())
 
 }

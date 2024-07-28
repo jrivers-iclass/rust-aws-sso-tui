@@ -1,5 +1,5 @@
 use std::{collections::HashMap, rc::Rc};
-use crate::{aws::AccountInfo, sso, tui, widgets};
+use crate::{aws::AccountInfo, sso, tui, widgets::{self}};
 use directories::UserDirs;
 use ini::Ini;
 use ratatui::{
@@ -39,6 +39,17 @@ pub struct AccountRow {
 }
 
 #[derive(Clone)]
+pub struct ConfigOption {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone)]
+pub struct ConfigOptions {
+    pub options: Vec<ConfigOption>,
+}
+
+#[derive(Clone)]
 pub struct App {
     pub table_state: TableState,
     pub rows: Vec<AccountRow>,
@@ -52,12 +63,13 @@ pub struct App {
     pub role_credentials: RoleCredentials,
     pub credential_message: String,
     pub aws_config_provider: ConfigProvider,
-    pub start_url: String,
+    pub config_table_state: TableState,
     pub value_input: String,
     pub currently_editing: bool,
     pub token_prompt: String,
     pub current_page: CurrentPage,
     pub routes: HashMap<CurrentPage, RouteConfig>,
+    pub config_options: ConfigOptions,
 }
 
 impl Default for App {
@@ -75,12 +87,15 @@ impl Default for App {
             role_credentials: RoleCredentials::default(),
             credential_message: String::new(),
             aws_config_provider: ConfigProvider::default(),
-            start_url: String::new(),
+            config_table_state: TableState::default(),
             value_input: String::new(),
             currently_editing: false,
             token_prompt: String::new(),
             current_page: CurrentPage::AccountList,
             routes: HashMap::new(),
+            config_options: ConfigOptions {
+                options: vec![],
+            },
         }
     }
 }
@@ -114,14 +129,29 @@ impl App {
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {   
         self.routes = self.create_routes();
-        let config = self.load_config()?;    
+        self.config_options = ConfigOptions {
+            options: vec![
+                ConfigOption {
+                    name: "start_url".to_string(),
+                    value: "".to_string(),
+                },
+                ConfigOption {
+                    name: "aws_config_path".to_string(),
+                    value: sso::get_default_aws_path().to_str().unwrap().to_string(),
+                },
+            ],
+        };
+        let config = self.load_config()?;
+        
 
-        self.start_url = config.get_from(Some("Main"), "start_url").unwrap().to_string();        
-
-        if self.start_url.is_empty() {
-            self.currently_editing = true;
-        }  
-
+        // Map values from config to config_options
+        for option in self.config_options.options.iter_mut() {
+            let section = config.section(Some("Main".to_string())).unwrap();
+            option.value = match section.get(&option.name) {
+                Some(value) => value.to_string(),
+                None => option.value.clone(),                
+            }
+        }      
         self.load_aws_config(Some(false));      
 
         self.get_account_list()        ;
@@ -134,7 +164,9 @@ impl App {
     }
 
     pub fn load_aws_config(&mut self, new_token: Option<bool>) {
-        self.aws_config_provider = match sso::get_aws_config(self.start_url.clone().as_str(), self, Some(new_token.unwrap_or(false))) {
+        let start_url = self.config_options.options.iter().find(|option| option.name == "start_url").unwrap().value.clone();
+
+        self.aws_config_provider = match sso::get_aws_config(start_url.as_str(), self, Some(new_token.unwrap_or(false))) {
             Ok(access_token) => access_token,
             Err(_) => ConfigProvider::default(),
         };
@@ -293,7 +325,8 @@ impl App {
             self.credential_message = "Copied environment variable exports for AWS CLI - Linux...".to_string();
         }
 
-        let _ = sso::export_env_vars(&self.role_credentials);
+        let aws_config_path = self.config_options.options.iter().find(|option| option.name == "aws_config_path").unwrap().clone();
+        let _ = sso::export_env_vars(&self.role_credentials, aws_config_path);
         self.credential_message += "Done!";
     }
 
