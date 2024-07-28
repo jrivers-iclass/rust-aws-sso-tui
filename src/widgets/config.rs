@@ -57,21 +57,15 @@ pub fn handle_key_events(app: &mut App, key: KeyEvent) -> Result<(), anyhow::Err
             app.config_table_state.select(Some(i));
             app.value_input = app.config_options.options[i].value.clone();
         },
-        KeyCode::Char(value) => {            
-            let i = match app.config_table_state.selected() {
-                Some(i) => i,
-                None => 0,
-            };
-            if i > 0 {
+        KeyCode::Char(value) => {                      
+            if app.config_table_state.selected() != None {
+                let i = app.config_table_state.selected().unwrap();
                 app.config_options.options[i].value.push(value);
             }
         },
         KeyCode::Backspace => {
-            let i = match app.config_table_state.selected() {
-                Some(i) => i,
-                None => 0,
-            };
-            if i > 0 {
+            if app.config_table_state.selected() != None {
+                let i = app.config_table_state.selected().unwrap();
                 app.config_options.options[i].value.pop();
             }
         },      
