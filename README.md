@@ -1,13 +1,21 @@
 ﻿# AWS SSO TUI
 
-This project requires the Granted firefox extension which can be found [Here](https://addons.mozilla.org/en-US/firefox/addon/granted/), if you intend to use the AWS console feature (Browser)
+This project requires the Granted Firefox extension, which can be found [here](https://addons.mozilla.org/en-US/firefox/addon/granted/), if you intend to use the AWS console feature (Browser).
 
 ## Installation
 
-Using Homebrew:
+To install this project using Homebrew, follow these steps:
+
+1. Open your terminal.
+2. Run the following command to tap into the repository:
 
 ```bash
 brew tap jrivers-iclass/rust-aws-sso-tui
+```
+
+3. Run the following command to install AWS SSO:
+
+```bash
 brew install aws-sso
 ```
 
