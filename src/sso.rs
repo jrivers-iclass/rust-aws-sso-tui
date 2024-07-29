@@ -31,7 +31,7 @@ impl Default for ConfigProvider {
 }
 
 #[::tokio::main]
-pub async fn get_aws_config(start_url: &str, app: &mut App, new_token: Option<bool>) -> Result<ConfigProvider, anyhow::Error> {
+pub async fn get_aws_config(start_url: &str, region: &str, app: &mut App, new_token: Option<bool>) -> Result<ConfigProvider, anyhow::Error> {
     if start_url.is_empty() {
         return Err(Error::msg("SSO Start URL is required"));
     }
@@ -40,7 +40,7 @@ pub async fn get_aws_config(start_url: &str, app: &mut App, new_token: Option<bo
     let aws_config_dir = home_dir.join(".aws");
 
     let config = aws_config::SdkConfig::builder()
-        .region(Some(Region::new("us-east-1")))
+        .region(Some(Region::new(region.to_string())))
         .behavior_version(BehaviorVersion::latest())
         .build();
 
