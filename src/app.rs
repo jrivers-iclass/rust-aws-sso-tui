@@ -108,9 +108,11 @@ impl App {
         if !file_path.exists() {
             let _ = std::fs::create_dir_all(file_path.parent().unwrap());
             let _ = std::fs::write(file_path.clone(), "".as_bytes());
-    
-            config.with_section(Some("Main".to_string()))
-                .set("start_url", "");
+            
+            self.config_options.options.iter().for_each(|option| {
+                config.with_section(Some("Main".to_string()))
+                    .set(option.name.clone(), option.value.clone());                
+            });
     
             self.update_config(&mut config)?;
         } else {
@@ -139,6 +141,10 @@ impl App {
                     name: "aws_config_path".to_string(),
                     value: sso::get_default_aws_path().to_str().unwrap().to_string(),
                 },
+                ConfigOption {
+                    name: "region".to_string(),
+                    value: "us-east-1".to_string(),
+                },
             ],
         };
         let config = self.load_config()?;
@@ -165,8 +171,9 @@ impl App {
 
     pub fn load_aws_config(&mut self, new_token: Option<bool>) {
         let start_url = self.config_options.options.iter().find(|option| option.name == "start_url").unwrap().value.clone();
+        let region = self.config_options.options.iter().find(|option| option.name == "region").unwrap().value.clone();
 
-        self.aws_config_provider = match sso::get_aws_config(start_url.as_str(), self, Some(new_token.unwrap_or(false))) {
+        self.aws_config_provider = match sso::get_aws_config(start_url.as_str(), region.as_str(), self, Some(new_token.unwrap_or(false))) {
             Ok(access_token) => access_token,
             Err(_) => ConfigProvider::default(),
         };
