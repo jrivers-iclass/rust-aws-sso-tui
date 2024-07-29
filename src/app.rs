@@ -160,7 +160,7 @@ impl App {
         }      
         self.load_aws_config(Some(false));      
 
-        self.get_account_list()        ;
+        self.get_account_list();
                       
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;

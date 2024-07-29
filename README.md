@@ -10,13 +10,13 @@ To install this project using Homebrew, follow these steps:
 2. Run the following command to tap into the repository:
 
 ```bash
-brew tap jrivers-iclass/rust-aws-sso-tui
+brew tap jrivers-iclass/tools
 ```
 
 3. Run the following command to install AWS SSO:
 
 ```bash
-brew install aws-sso
+brew install assumer
 ```
 
-This will install a binary called `rust-sso` in your path.
+This will install a binary called `assumer` in your path.
