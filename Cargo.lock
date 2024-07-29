@@ -1735,6 +1735,7 @@ dependencies = [
  "serde_urlencoded",
  "sha1",
  "tokio",
+ "urlencoding",
  "webbrowser",
 ]
 
