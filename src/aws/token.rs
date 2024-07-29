@@ -39,6 +39,7 @@ impl DeviceClient {
     
 }
 
+#[derive(Clone)]
 pub struct SsoAccessTokenProvider {
     sso_session_name: String,
     client: Client,
