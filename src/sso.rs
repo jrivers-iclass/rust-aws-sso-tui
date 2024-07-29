@@ -20,6 +20,7 @@ pub struct RoleCredentials {
 pub struct ConfigProvider {
     pub access_token: AccessToken,
     pub account_info_provider: Option<AccountInfoProvider>,
+    pub token_provider: Option<SsoAccessTokenProvider>,
 }
 
 impl Default for ConfigProvider {
@@ -27,6 +28,7 @@ impl Default for ConfigProvider {
         ConfigProvider {
             access_token: AccessToken::default(),
             account_info_provider: None,
+            token_provider: None,
         }
     }
 }
@@ -54,6 +56,7 @@ pub async fn get_aws_config(start_url: &str, region: &str, app: &mut App, new_to
             Ok(ConfigProvider {
                 access_token: token,
                 account_info_provider: Some(AccountInfoProvider::new(&config)),
+                token_provider: Some(token_provider),
             })
         }
         Err(e) => Err(e),
@@ -61,9 +64,14 @@ pub async fn get_aws_config(start_url: &str, region: &str, app: &mut App, new_to
 }
 
 #[::tokio::main]
-pub async fn get_sso_accounts(config_provider: ConfigProvider) -> Result<Vec<AccountInfo>, anyhow::Error> {
-    let mut sso_accounts = config_provider.account_info_provider.unwrap()
-        .get_account_list(&config_provider.access_token)
+pub async fn get_sso_accounts(app: &mut App) -> Result<Vec<AccountInfo>, anyhow::Error> {
+    let config_provider = app.aws_config_provider.clone();
+    let token_provider = &config_provider.token_provider.as_ref().unwrap();
+    let start_url = &app.config_options.options.iter().find(|option| option.name == "start_url").unwrap().value.clone();
+    let access_token = token_provider.get_access_token(start_url, false, app).await?;
+
+    let mut sso_accounts = config_provider.account_info_provider.as_ref().unwrap()
+        .get_account_list(&access_token)
         .await?;
     
     sso_accounts.sort();
@@ -72,16 +80,26 @@ pub async fn get_sso_accounts(config_provider: ConfigProvider) -> Result<Vec<Acc
 }
 
 #[::tokio::main]
-pub async fn get_account_roles(config_provider: ConfigProvider, account: AccountInfo) -> Result<Vec<String>, anyhow::Error> {
-    let roles = config_provider.account_info_provider.unwrap().get_roles_for_account(&config_provider.access_token, &account).await?;
+pub async fn get_account_roles(app: &mut App, account: AccountInfo) -> Result<Vec<String>, anyhow::Error> {
+    let config_provider = app.aws_config_provider.clone();
+    let token_provider = &config_provider.token_provider.as_ref().unwrap();
+    let start_url = &app.config_options.options.iter().find(|option| option.name == "start_url").unwrap().value.clone();
+    let access_token = token_provider.get_access_token(start_url, false, app).await?;
+
+    let roles = config_provider.account_info_provider.unwrap().get_roles_for_account(&access_token, &account).await?;
     
     Ok(roles)
 }
 
 #[::tokio::main]
-pub async fn get_account_role_credentials(config_provider: ConfigProvider, account: AccountInfo, role: &str) -> Result<RoleCredentials, anyhow::Error> {     
+pub async fn get_account_role_credentials(app: &mut App, account: AccountInfo, role: &str) -> Result<RoleCredentials, anyhow::Error> {     
+    let config_provider = app.aws_config_provider.clone();
+    let token_provider = &config_provider.token_provider.as_ref().unwrap();
+    let start_url = &app.config_options.options.iter().find(|option| option.name == "start_url").unwrap().value.clone();
+    let access_token = token_provider.get_access_token(start_url, false, app).await?;
+
     // Get credentials for the role
-    let role_credentials_output = config_provider.account_info_provider.unwrap().get_role_credentials(&config_provider.access_token, &account, role).await?;
+    let role_credentials_output = config_provider.account_info_provider.unwrap().get_role_credentials(&access_token, &account, role).await?;
     let role_credentials = role_credentials_output.role_credentials().unwrap();
 
     Ok( RoleCredentials {
@@ -205,6 +223,6 @@ pub fn export_env_vars(credentials: &RoleCredentials, aws_config_path: ConfigOpt
 
 }
 
-fn check_for_granted_extension() -> bool {
-    unimplemented!()
-}
+// fn check_for_granted_extension() -> bool {
+//     unimplemented!()
+// }

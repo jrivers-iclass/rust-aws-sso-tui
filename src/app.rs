@@ -181,7 +181,7 @@ impl App {
 
     pub fn get_account_list(&mut self) {
         if !self.aws_config_provider.account_info_provider.is_none() {
-            let sso_accounts = sso::get_sso_accounts(self.aws_config_provider.clone());
+            let sso_accounts = sso::get_sso_accounts(self);
             self.rows = vec![];
             match sso_accounts {
                 Ok(sso_accounts) => {          
@@ -344,7 +344,7 @@ impl App {
             account_id: self.selected_account.account_id.clone(),
             roles: vec![],
         };
-        let roles = match sso::get_account_roles(self.aws_config_provider.clone(), account_info) {
+        let roles = match sso::get_account_roles(self, account_info) {
             Ok(roles) => roles,
             Err(err) => vec![err.to_string()],
         };
@@ -360,7 +360,7 @@ impl App {
             roles: vec![],
         };
         let role = self.selected_role.clone();
-        let role_credentials = match sso::get_account_role_credentials(self.aws_config_provider.clone(), account_info, &role) {
+        let role_credentials = match sso::get_account_role_credentials(self, account_info, &role) {
             Ok(role_credentials) => role_credentials,
             Err(err) => sso::RoleCredentials {
                 access_key_id: "".to_string(),

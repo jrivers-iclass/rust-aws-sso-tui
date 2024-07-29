@@ -3,6 +3,7 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use crate::utils::json;
 
+#[derive(Clone)]
 pub struct AccessTokenCache {
     cache_dir: PathBuf,
     sso_session_name: String,
