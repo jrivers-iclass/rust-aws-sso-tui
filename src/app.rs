@@ -102,7 +102,7 @@ impl Default for App {
 
 impl App {    
     pub fn load_config(&mut self) -> Result<Ini, Error> {
-        let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
+        let file_path = UserDirs::new().unwrap().home_dir().join(".assumer").join("config.ini");
     
         let mut config = Ini::new();
         if !file_path.exists() {
@@ -123,7 +123,7 @@ impl App {
     }
     
     pub fn update_config(&mut self, config: &mut Ini) -> Result<(), Error> {
-        let file_path = UserDirs::new().unwrap().home_dir().join(".rust-tui").join("config.ini");
+        let file_path = UserDirs::new().unwrap().home_dir().join(".assumer").join("config.ini");
         config.write_to_file(file_path)?;
         Ok(())
     }
