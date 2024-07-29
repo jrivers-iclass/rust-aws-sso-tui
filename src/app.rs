@@ -359,10 +359,11 @@ impl App {
             account_id: self.selected_account.account_id.clone(),
             roles: vec![],
         };
-        let role = self.selected_role.clone();
-        let role_credentials = match sso::get_account_role_credentials(self, account_info, &role) {
+        let role = self.selected_role.clone();        
+        let role_credentials = match sso::get_account_role_credentials(self, account_info.clone(), &role) {
             Ok(role_credentials) => role_credentials,
             Err(err) => sso::RoleCredentials {
+                name: "".to_string(),
                 access_key_id: "".to_string(),
                 secret_access_key: "".to_string(),
                 session_token: "".to_string(),
@@ -371,6 +372,7 @@ impl App {
         };
         self.role_credentials = role_credentials;
         self.role_is_selected = true;
+        let _ = sso::export_profiles( account_info, &role, &self.config_options);
     }
 
     pub fn next_role(&mut self) {

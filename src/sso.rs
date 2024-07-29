@@ -3,13 +3,14 @@ use ini::Ini;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, process::Command};
-use crate::{aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider}, App, ConfigOption};
+use crate::{aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider}, App, ConfigOption, ConfigOptions};
 use aws_config::{BehaviorVersion, Region};
 use directories::UserDirs;
 use urlencoding::encode;
 
 #[derive(Default, Clone)]
 pub struct RoleCredentials {
+    pub name: String,
     pub access_key_id: String,
     pub secret_access_key: String,
     pub session_token: String,
@@ -103,6 +104,7 @@ pub async fn get_account_role_credentials(app: &mut App, account: AccountInfo, r
     let role_credentials = role_credentials_output.role_credentials().unwrap();
 
     Ok( RoleCredentials {
+        name: role.to_string(),
         access_key_id: role_credentials.access_key_id().unwrap().to_string(),
         secret_access_key: role_credentials.secret_access_key().unwrap().to_string(),
         session_token: role_credentials.session_token().unwrap().to_string(),
@@ -221,6 +223,35 @@ pub fn export_env_vars(credentials: &RoleCredentials, aws_config_path: ConfigOpt
         
     Ok(())
 
+}
+
+pub fn export_profiles(account: AccountInfo, role: &str, config_provider: &ConfigOptions) -> Result<(), anyhow::Error> {
+    let start_url = &config_provider.options.iter().find(|option| option.name == "start_url").unwrap().value.clone();
+    let file_path = &PathBuf::from(&config_provider.options.iter().find(|option| option.name == "aws_config_path").unwrap().value).join("config");
+    let region = &config_provider.options.iter().find(|option| option.name == "region").unwrap().value;
+    let profile_name = format!("profile 'assumer-{}/{}'", account.account_name, role);
+    let output = "json";
+    
+    let mut config = Ini::new();
+    if !file_path.exists() {
+        let _ = std::fs::create_dir_all(file_path.parent().unwrap());
+        let _ = std::fs::write(file_path, "".as_bytes());                        
+    } else {
+        config = Ini::load_from_file(file_path.clone()).unwrap();
+    }
+
+
+    config.with_section(Some(&profile_name))
+            .set("sso_account_id", &account.account_id)
+            .set("sso_role_name", role)
+            .set("sso_start_url", start_url)
+            .set("sso_region", region)
+            .set("output", output)
+            .set("source_profile", "default");
+
+    let _ = config.write_to_file(file_path.clone());
+        
+    Ok(())
 }
 
 // fn check_for_granted_extension() -> bool {
