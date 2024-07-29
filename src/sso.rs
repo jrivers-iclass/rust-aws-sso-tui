@@ -2,10 +2,11 @@ use anyhow::Error;
 use ini::Ini;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, process::Command};
+use std::{path::PathBuf, process::Command};
 use crate::{aws::{session_name, AccessToken, AccountInfo, AccountInfoProvider, SsoAccessTokenProvider}, App, ConfigOption};
 use aws_config::{BehaviorVersion, Region};
 use directories::UserDirs;
+use urlencoding::encode;
 
 #[derive(Default, Clone)]
 pub struct RoleCredentials {
@@ -142,25 +143,30 @@ pub async fn open_console(role_credentials: RoleCredentials, account: AccountInf
 
     let federated_url = format!("{}?{}", aws_federated_signin_endpoint, serde_urlencoded::to_string(&federated_params)?);     
     let profile_name = format!("aws-sso-{}-{}", account.account_id, role);
-    let profile_dir = create_firefox_profile(&profile_name);
-    let profile_path_str = profile_dir.to_str().unwrap();
+
+    let granted_container_url = ContainerUrl {
+        name: profile_name.to_string(),
+        url: encode(&federated_url).to_string()
+    };
+
+    let granted_container_oss = format!("ext+granted-containers:name={}&url={}", granted_container_url.name, granted_container_url.url);
 
     if cfg!(target_os = "windows") {
         // For Windows
         Command::new("powershell")
-            .args(&["-Command", "Start-Process", "firefox", "-ArgumentList", &format!("'--new-instance', '--profile', '{}', '{}'", profile_path_str, &federated_url)])
+            .args(&["-Command", "Start-Process", "firefox", "-ArgumentList", &format!("'--new-tab', '{}'", &granted_container_oss)])
             .status()
             .expect("failed to open browser");
     } else if cfg!(target_os = "macos") {
         // For macOS
         Command::new("open")
-            .args(&["-na", "Firefox", "--args", "--new-instance", "--profile", profile_path_str, &federated_url])
+            .args(&["-na", "Firefox", "--args", "--new-tab",  &granted_container_oss])
             .status()
             .expect("failed to open browser");
     } else if cfg!(target_os = "linux") {
         // For Linux
         Command::new("firefox")
-            .args(&["--new-instance", "--profile", profile_path_str, &federated_url])
+            .args(&["--new-table", &granted_container_oss])
             .status()
             .expect("failed to open browser");
     } else {
@@ -199,21 +205,6 @@ pub fn export_env_vars(credentials: &RoleCredentials, aws_config_path: ConfigOpt
 
 }
 
-fn create_firefox_profile(profile_name: &str) -> PathBuf {
-    let user_dirs = UserDirs::new().expect("Could not find user directories");
-    let profile_dir = user_dirs.home_dir().join(format!(".mozilla/firefox/{}.{}", profile_name, "aws-sso"));
-
-    if !profile_dir.exists() {
-        fs::create_dir_all(&profile_dir).expect("Could not create profile directory");
-
-        // Create a basic prefs.js file for the profile
-        let prefs_content = r#"
-user_pref("browser.startup.homepage", "about:blank");
-user_pref("browser.shell.checkDefaultBrowser", false);
-user_pref("app.normandy.first_run", false);
-        "#;
-        fs::write(profile_dir.join("prefs.js"), prefs_content).expect("Could not write prefs.js file");
-    }
-
-    profile_dir
+fn check_for_granted_extension() -> bool {
+    unimplemented!()
 }
