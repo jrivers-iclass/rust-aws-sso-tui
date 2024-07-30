@@ -12,6 +12,10 @@ use super::Page;
 #[derive(Clone)]
 pub struct AccountsPage;
 impl Page for AccountsPage {
+    fn active(&self, _app: App) -> bool {
+        return true;
+    }
+
     fn handle_key_events(&mut self, app: &mut App, key: KeyEvent) -> Result<(), ()> {
         match key.code {
             KeyCode::Down => {
@@ -41,7 +45,8 @@ impl Page for AccountsPage {
         Layout::horizontal([Constraint::Min(5)]).split(frame.size())
     }
 
-    fn render(&mut self, frame: &mut Frame, app: &mut App, rect: Rect) {
+    fn render(&mut self, frame: &mut Frame, app: &mut App) {
+        let rect = self.get_layout(frame)[0];
         let style = {
             if app.is_selected {
                 Style::new().white()

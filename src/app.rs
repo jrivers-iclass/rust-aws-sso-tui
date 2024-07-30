@@ -1,10 +1,8 @@
-use std::{collections::HashMap, rc::Rc};
-use crate::{aws::AccountInfo, pages::{self, Page, PageEnum}, sso, tui};
-use aws_sdk_sso::config;
+use crate::{aws::AccountInfo, pages::{self, PageEnum}, sso, tui};
 use directories::UserDirs;
 use ini::Ini;
 use ratatui::{
-    crossterm::event::{self, Event, KeyEvent, KeyEventKind}, layout::{Constraint, Layout, Rect}, widgets::{
+    crossterm::event::{self, Event, KeyEvent, KeyEventKind}, widgets::{
         ScrollbarState, TableState,
     }, Frame
 };
@@ -26,9 +24,7 @@ pub enum CurrentPage{
 
 #[derive(Clone)]
 pub struct RouteConfig {
-    pub route: PageEnum,
-    pub active: fn (&App) -> bool,
-    pub box_index: usize,
+    pub route: PageEnum
 }
 
 
@@ -69,7 +65,7 @@ pub struct App {
     pub currently_editing: bool,
     pub token_prompt: String,
     pub current_page: CurrentPage,
-    pub routes: HashMap<String, RouteConfig>,
+    pub routes: Vec<RouteConfig>,
     pub config_options: ConfigOptions,
 }
 
@@ -93,7 +89,20 @@ impl Default for App {
             currently_editing: false,
             token_prompt: String::new(),
             current_page: CurrentPage::AccountList,
-            routes: HashMap::new(),
+            routes: vec![
+                RouteConfig {
+                    route: PageEnum::AccountsPage(pages::AccountsPage)
+                },
+                RouteConfig {
+                    route: PageEnum::RolesPage(pages::RolesPage)
+                },
+                RouteConfig {
+                    route: PageEnum::CredentialsPage(pages::CredentialsPage)
+                },
+                RouteConfig {
+                    route: PageEnum::ConfigPage(pages::ConfigPage)
+                },
+            ],
             config_options: ConfigOptions {
                 options: vec![],
             },
@@ -127,34 +136,10 @@ impl App {
         let file_path = UserDirs::new().unwrap().home_dir().join(".assumer").join("config.ini");
         config.write_to_file(file_path)?;
         Ok(())
-    }
-
-    pub fn create_routes(&mut self) {
-        self.routes.insert("AccountList".to_string(), RouteConfig {
-            route: PageEnum::AccountsPage(pages::AccountsPage),
-            active: |app| app.current_page == CurrentPage::AccountList,
-            box_index: 0,
-        });
-        self.routes.insert("Roles".to_string(), RouteConfig {
-            route: PageEnum::RolesPage(pages::RolesPage),
-            active: |app| app.current_page == CurrentPage::Roles,
-            box_index: 1,
-        });
-        self.routes.insert("Credentials".to_string(), RouteConfig {
-            route: PageEnum::CredentialsPage(pages::CredentialsPage),
-            active: |app| app.current_page == CurrentPage::Credentials,
-            box_index: 0,
-        });
-        self.routes.insert("Config".to_string(), RouteConfig {
-            route: PageEnum::ConfigPage(pages::ConfigPage),
-            active: |app| app.current_page == CurrentPage::Config,
-            box_index: 0,
-        });
-    }    
+    }     
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {   
-        self.create_routes();
 
         self.config_options = ConfigOptions {
             options: vec![
@@ -236,20 +221,9 @@ impl App {
         }
     }
 
-    fn render_frame(&mut self, frame: &mut Frame) {                  
-        let current_page: String = self.current_page.clone().to_string();   
-
-        if let Some(route) = self.routes.get_mut(&current_page) {
-            // Get the layout for the route
-            let rects = route.route.get_layout(frame);
-            
-            // Render the route
-            route.route.render(frame, self, rects[route.box_index]);
-            
-        } else {
-            println!("Route for '{}' not found", current_page);
-        }          
-    }    
+    fn render_frame(&mut self, frame: &mut Frame) { 
+    
+    }
 
     /// updates the application's self based on user input
     fn handle_events(&mut self) -> Result<()> {

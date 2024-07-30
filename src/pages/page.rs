@@ -6,8 +6,9 @@ use crate::App;
 use crate::pages; // Add this line to import the 'pages' module
 
 pub trait Page: Clone {
+    fn active(&self, app: App) -> bool;
     fn handle_key_events(&mut self, app: &mut App, key: KeyEvent) -> Result<(), ()>;
-    fn render(&mut self, frame: &mut Frame, app: &mut App, rect: Rect);
+    fn render(&mut self, frame: &mut Frame, app: &mut App);
     fn get_layout(&mut self, frame: &Frame) -> Rc<[Rect]>;    
 }
 
@@ -20,6 +21,15 @@ pub enum PageEnum {
 }
 
 impl Page for PageEnum {
+    fn active(&self, app: App) -> bool {
+        match self {
+            PageEnum::ConfigPage(page) => page.active(app),
+            PageEnum::CredentialsPage(page) => page.active(app),
+            PageEnum::RolesPage(page) => page.active(app),
+            PageEnum::AccountsPage(page) => page.active(app),
+        }
+    }
+
     fn handle_key_events(&mut self, app: &mut App, key: KeyEvent) -> Result<(), ()> {
         match self {
             PageEnum::ConfigPage(page) => page.handle_key_events(app, key),
@@ -29,12 +39,12 @@ impl Page for PageEnum {
         }
     }
 
-    fn render(&mut self, frame: &mut Frame, app: &mut App, rect: Rect) {
+    fn render(&mut self, frame: &mut Frame, app: &mut App) {
         match self {
-            PageEnum::ConfigPage(page) => page.render(frame, app, rect),
-            PageEnum::CredentialsPage(page) => page.render(frame, app, rect),
-            PageEnum::RolesPage(page) => page.render(frame, app, rect),
-            PageEnum::AccountsPage(page) => page.render(frame, app, rect),
+            PageEnum::ConfigPage(page) => page.render(frame, app),
+            PageEnum::CredentialsPage(page) => page.render(frame, app),
+            PageEnum::RolesPage(page) => page.render(frame, app),
+            PageEnum::AccountsPage(page) => page.render(frame, app),
         }
     }
 

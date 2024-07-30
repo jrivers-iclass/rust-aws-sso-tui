@@ -12,6 +12,10 @@ use super::Page;
 #[derive(Clone)]
 pub struct RolesPage;
 impl Page for RolesPage {
+    fn active(&self, app: App) -> bool {
+        return app.is_selected == true;
+    }
+
     fn handle_key_events(&mut self, app: &mut App, key: KeyEvent) -> Result<(), ()> {
         match key.code {
             KeyCode::Down => {
@@ -41,7 +45,8 @@ impl Page for RolesPage {
         Layout::horizontal([Constraint::Min(5), Constraint::Min(5)]).split(frame.size())
     }
 
-    fn render(&mut self, frame: &mut Frame, app: &mut App, rect: Rect) {
+    fn render(&mut self, frame: &mut Frame, app: &mut App) {
+        let rect = self.get_layout(frame)[1];
         let instructions = Title::from(Line::from(vec![
             " Scroll Up ".into(),
             "<Up>".blue().bold(),

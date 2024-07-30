@@ -12,6 +12,10 @@ use super::Page;
 #[derive(Clone)]
 pub struct CredentialsPage;
 impl Page for CredentialsPage {
+    fn active(&self, app: App) -> bool {
+        return app.role_is_selected == true;
+    }
+
     fn handle_key_events(&mut self, app: &mut App, key: KeyEvent) -> Result<(), ()> {
         match key.code {
             KeyCode::Char('q') => app.exit(),                
@@ -36,7 +40,8 @@ impl Page for CredentialsPage {
         Layout::horizontal([Constraint::Min(5)]).split(frame.size())
     }
 
-    fn render(&mut self, frame: &mut Frame, app: &mut App, rect: Rect) {
+    fn render(&mut self, frame: &mut Frame, app: &mut App) {
+        let rect = self.get_layout(frame)[0];
         let instructions = Title::from(Line::from(vec![
             " Back ".into(),
             "<Left>".blue().bold(),        

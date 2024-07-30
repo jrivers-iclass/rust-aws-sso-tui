@@ -12,6 +12,10 @@ use super::Page;
 #[derive(Clone)]
 pub struct ConfigPage;
 impl Page for ConfigPage {
+    fn active(&self, app: App) -> bool {
+        return app.currently_editing == true;
+    }
+    
     fn handle_key_events(&mut self, app: &mut App, key: KeyEvent) -> Result<(), ()> {
         match key.code {
             KeyCode::Enter => {
@@ -83,7 +87,8 @@ impl Page for ConfigPage {
         Layout::horizontal([Constraint::Min(5)]).split(frame.size())
     }
 
-    fn render(&mut self, frame: &mut Frame, app: &mut App, rect: Rect) {
+    fn render(&mut self, frame: &mut Frame, app: &mut App) {
+        let rect = self.get_layout(frame)[0];
         let instructions = Title::from(Line::from(vec![
             " Next ".into(),
             "<Down>".blue().bold(),
