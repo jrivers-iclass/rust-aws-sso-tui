@@ -3,7 +3,7 @@ mod tui;
 mod sso;
 mod aws;
 mod utils;
-mod widgets;
+mod pages;
 mod app;
 
 use app::*;

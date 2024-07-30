@@ -1,13 +1,12 @@
 use std::{collections::HashMap, rc::Rc};
-use crate::{aws::AccountInfo, sso, tui, widgets::{self}};
+use crate::{aws::AccountInfo, pages::{self, Page, PageEnum}, sso, tui};
+use aws_sdk_sso::config;
 use directories::UserDirs;
 use ini::Ini;
 use ratatui::{
-    layout::Rect, widgets::{
+    crossterm::event::{self, Event, KeyEvent, KeyEventKind}, layout::{Constraint, Layout, Rect}, widgets::{
         ScrollbarState, TableState,
-    }, 
-    crossterm::event::{self, Event, KeyEvent, KeyEventKind},
-    Frame
+    }, Frame
 };
 use color_eyre::{
     eyre::{Error, WrapErr},
@@ -17,7 +16,7 @@ use crate::sso::{ConfigProvider, RoleCredentials};
 
 const ITEM_HEIGHT: usize = 4;
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, strum_macros::Display)]
 pub enum CurrentPage{
     AccountList,
     Config,
@@ -27,9 +26,11 @@ pub enum CurrentPage{
 
 #[derive(Clone)]
 pub struct RouteConfig {
-    pub layout: fn(&mut Frame) -> Rc<[Rect]>,
-    pub render: fn(&mut Frame, &mut App, Rect),
+    pub route: PageEnum,
+    pub active: fn (&App) -> bool,
+    pub box_index: usize,
 }
+
 
 #[derive(Default, Clone)]
 pub struct AccountRow {
@@ -49,7 +50,7 @@ pub struct ConfigOptions {
     pub options: Vec<ConfigOption>,
 }
 
-#[derive(Clone)]
+
 pub struct App {
     pub table_state: TableState,
     pub rows: Vec<AccountRow>,
@@ -68,7 +69,7 @@ pub struct App {
     pub currently_editing: bool,
     pub token_prompt: String,
     pub current_page: CurrentPage,
-    pub routes: HashMap<CurrentPage, RouteConfig>,
+    pub routes: HashMap<String, RouteConfig>,
     pub config_options: ConfigOptions,
 }
 
@@ -128,9 +129,33 @@ impl App {
         Ok(())
     }
 
+    pub fn create_routes(&mut self) {
+        self.routes.insert("AccountList".to_string(), RouteConfig {
+            route: PageEnum::AccountsPage(pages::AccountsPage),
+            active: |app| app.current_page == CurrentPage::AccountList,
+            box_index: 0,
+        });
+        self.routes.insert("Roles".to_string(), RouteConfig {
+            route: PageEnum::RolesPage(pages::RolesPage),
+            active: |app| app.current_page == CurrentPage::Roles,
+            box_index: 1,
+        });
+        self.routes.insert("Credentials".to_string(), RouteConfig {
+            route: PageEnum::CredentialsPage(pages::CredentialsPage),
+            active: |app| app.current_page == CurrentPage::Credentials,
+            box_index: 0,
+        });
+        self.routes.insert("Config".to_string(), RouteConfig {
+            route: PageEnum::ConfigPage(pages::ConfigPage),
+            active: |app| app.current_page == CurrentPage::Config,
+            box_index: 0,
+        });
+    }    
+
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut tui::Tui) -> Result<()> {   
-        self.routes = self.create_routes();
+        self.create_routes();
+
         self.config_options = ConfigOptions {
             options: vec![
                 ConfigOption {
@@ -162,7 +187,7 @@ impl App {
 
         self.get_account_list();
                       
-        while !self.exit {
+        while !self.exit {          
             terminal.draw(|frame| self.render_frame(frame))?;
             self.handle_events().wrap_err("handle events failed")?;
         }
@@ -211,61 +236,20 @@ impl App {
         }
     }
 
-    fn render_frame(&mut self, frame: &mut Frame) {        
-        if self.currently_editing {
-            self.route(frame, CurrentPage::Config);
-        } else if self.role_is_selected {
-            self.route(frame,CurrentPage::Credentials);
-        } else if self.is_selected {
-            self.route(frame,CurrentPage::Roles);
+    fn render_frame(&mut self, frame: &mut Frame) {                  
+        let current_page: String = self.current_page.clone().to_string();   
+
+        if let Some(route) = self.routes.get_mut(&current_page) {
+            // Get the layout for the route
+            let rects = route.route.get_layout(frame);
+            
+            // Render the route
+            route.route.render(frame, self, rects[route.box_index]);
+            
         } else {
-            self.route(frame,CurrentPage::AccountList);
-        }
-    }
-
-    fn route(&mut self, frame: &mut Frame, page: CurrentPage) {
-        if let Some(route) = self.routes.get(&page) {
-            let rects = (route.layout)(frame);
-            (route.render)(frame, self, rects[0]);
-            self.current_page = page;
-        }
-    }
-
-    fn create_routes(&mut self) -> HashMap<CurrentPage, RouteConfig> {
-        let mut routes = HashMap::new();
-
-        // Config route
-        routes.insert(CurrentPage::Config, RouteConfig {
-            layout: |frame| widgets::config::get_layout(frame),
-            render: |frame, mut app, rect| widgets::render_config(frame, &mut app, rect),
-        });
-
-        // Credentials route
-        routes.insert(CurrentPage::Credentials, RouteConfig {
-            layout: |frame| widgets::credentials::get_layout(frame),
-            render: |frame, mut app, rect| widgets::render_credentials(frame, &mut app, rect),
-        });
-
-        // AccountList route
-        routes.insert(CurrentPage::AccountList, RouteConfig {
-            layout: |frame| widgets::accounts::get_layout(frame),
-            render: |frame, mut app, rect| widgets::render_accounts(frame, &mut app, rect),
-        });
-
-        // Roles route
-        routes.insert(CurrentPage::Roles, RouteConfig {
-            layout: |frame| widgets::roles::get_layout(frame),
-            render: |frame, mut app, rect| {
-                widgets::render_accounts(frame, &mut app, rect);
-                if app.is_selected {
-                    let rects = widgets::roles::get_layout(frame);
-                    widgets::render_roles(frame, &mut app, rects[1]);
-                }
-            },
-        });
-
-        routes
-    }
+            println!("Route for '{}' not found", current_page);
+        }          
+    }    
 
     /// updates the application's self based on user input
     fn handle_events(&mut self) -> Result<()> {
@@ -281,21 +265,6 @@ impl App {
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
         self.credential_message = "".to_string();
-        match self.current_page {
-            CurrentPage::AccountList => {
-                let _ = widgets::accounts::handle_key_events(self, key_event);
-            }
-            CurrentPage::Roles => {
-                let _ = widgets::roles::handle_key_events(self, key_event);
-            }
-            CurrentPage::Credentials => {
-                let _ = widgets::credentials::handle_key_events(self, key_event);
-            }
-            CurrentPage::Config => {
-                let _ = widgets::config::handle_key_events(self, key_event);
-            }
-        }
-
         Ok(())
     }
 
