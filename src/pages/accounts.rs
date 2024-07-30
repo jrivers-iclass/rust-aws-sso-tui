@@ -12,7 +12,10 @@ use super::Page;
 #[derive(Clone)]
 pub struct AccountsPage;
 impl Page for AccountsPage {
-    fn active(&self, _app: App) -> bool {
+    fn active(&self, app: App) -> bool {
+        if app.role_is_selected {
+            return false;
+        }
         return true;
     }
 

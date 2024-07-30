@@ -74,10 +74,10 @@ impl Default for App {
             currently_editing: false,
             token_prompt: String::new(),
             routes: vec![
-                PageEnum::AccountsPage(pages::AccountsPage),                
+                PageEnum::ConfigPage(pages::ConfigPage),                
                 PageEnum::RolesPage(pages::RolesPage),
-                PageEnum::CredentialsPage(pages::CredentialsPage),
-                PageEnum::ConfigPage(pages::ConfigPage),
+                PageEnum::CredentialsPage(pages::CredentialsPage),                
+                PageEnum::AccountsPage(pages::AccountsPage),                
             ],
             config_options: ConfigOptions {
                 options: vec![],
@@ -211,10 +211,10 @@ impl App {
         let state = self.clone();
         for route in &mut self.routes.iter_mut() {            
             if route.active(state.clone()) {
-                {
-                    // TODO: Fix borrow issue with self
-                    route.handle_key_events(self, key_event);
-                }
+                // TODO: Fix borrow issue with self
+                route.handle_key_events(self, key_event);
+
+                // We break here to prevent multiple routes from handling the same key event
                 break;
             }
         }
