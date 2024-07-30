@@ -26,11 +26,9 @@ impl Page for RolesPage {
             }
             KeyCode::Left => {
                 app.is_selected = false;
-                app.current_page = crate::app::CurrentPage::AccountList;
             }
             KeyCode::Right => {
                 app.select_role();
-                app.current_page = crate::app::CurrentPage::Credentials;
             }        
             KeyCode::Char('q') => {
                 app.exit = true;

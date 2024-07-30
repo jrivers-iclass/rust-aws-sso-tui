@@ -15,7 +15,7 @@ impl Page for ConfigPage {
     fn active(&self, app: App) -> bool {
         return app.currently_editing == true;
     }
-    
+
     fn handle_key_events(&mut self, app: &mut App, key: KeyEvent) -> Result<(), ()> {
         match key.code {
             KeyCode::Enter => {
@@ -31,7 +31,6 @@ impl Page for ConfigPage {
     
                 app.load_aws_config(Some(true));
                 app.get_account_list();
-                app.current_page = crate::app::CurrentPage::AccountList;
             },
             KeyCode::Down => {
                 let i = match app.config_table_state.selected() {

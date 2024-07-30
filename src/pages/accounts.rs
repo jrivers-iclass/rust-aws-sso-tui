@@ -26,11 +26,9 @@ impl Page for AccountsPage {
             }
             KeyCode::Right => {
                 app.select_account();
-                app.current_page = crate::app::CurrentPage::Roles;
             }
             KeyCode::Char('c') => {
                 app.currently_editing = true;
-                app.current_page = crate::app::CurrentPage::Config;
             }
             KeyCode::Char('q') => {
                 app.exit = true;

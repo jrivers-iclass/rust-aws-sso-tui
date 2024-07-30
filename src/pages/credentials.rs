@@ -28,7 +28,6 @@ impl Page for CredentialsPage {
             },
             KeyCode::Left => {            
                 app.role_is_selected = false;     
-                app.current_page = crate::app::CurrentPage::Roles;
             }
             _ => {}
         }
