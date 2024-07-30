@@ -14,12 +14,6 @@ use crate::sso::{ConfigProvider, RoleCredentials};
 
 const ITEM_HEIGHT: usize = 4;
 
-#[derive(Clone)]
-pub struct RouteConfig {
-    pub route: PageEnum
-}
-
-
 #[derive(Default, Clone)]
 pub struct AccountRow {
     pub account_name: String,
@@ -56,7 +50,7 @@ pub struct App {
     pub value_input: String,
     pub currently_editing: bool,
     pub token_prompt: String,
-    pub routes: Vec<RouteConfig>,
+    pub routes: Vec<PageEnum>,
     pub config_options: ConfigOptions,
 }
 
@@ -80,18 +74,10 @@ impl Default for App {
             currently_editing: false,
             token_prompt: String::new(),
             routes: vec![
-                RouteConfig {
-                    route: PageEnum::AccountsPage(pages::AccountsPage)
-                },
-                RouteConfig {
-                    route: PageEnum::RolesPage(pages::RolesPage)
-                },
-                RouteConfig {
-                    route: PageEnum::CredentialsPage(pages::CredentialsPage)
-                },
-                RouteConfig {
-                    route: PageEnum::ConfigPage(pages::ConfigPage)
-                },
+                PageEnum::AccountsPage(pages::AccountsPage),                
+                PageEnum::RolesPage(pages::RolesPage),
+                PageEnum::CredentialsPage(pages::CredentialsPage),
+                PageEnum::ConfigPage(pages::ConfigPage),
             ],
             config_options: ConfigOptions {
                 options: vec![],
@@ -213,14 +199,26 @@ impl App {
 
     fn render_frame(&mut self, frame: &mut Frame) { 
         let state = self.clone();
-        for route_config in &mut self.routes.iter_mut() {            
-            if route_config.route.active(state.clone()) {
-                {
-                    // TODO: Fix borrow issue with self
-                    route_config.route.render(frame, self);
-                }
+        for route in &mut self.routes.iter_mut() {            
+            if route.active(state.clone()) {
+                // TODO: Fix borrow issue with self
+                route.render(frame, self);
             }
         }
+    }
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
+        let state = self.clone();
+        for route in &mut self.routes.iter_mut() {            
+            if route.active(state.clone()) {
+                {
+                    // TODO: Fix borrow issue with self
+                    route.handle_key_events(self, key_event);
+                }
+                break;
+            }
+        }
+        Ok(())
     }
 
     /// updates the application's self based on user input
@@ -233,21 +231,7 @@ impl App {
                 .wrap_err_with(|| format!("handling key event failed:\n{key_event:#?}")),
             _ => Ok(()),
         }
-    }
-
-    fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
-        let state = self.clone();
-        for route_config in &mut self.routes.iter_mut() {            
-            if route_config.route.active(state.clone()) {
-                {
-                    // TODO: Fix borrow issue with self
-                    route_config.route.handle_key_events(self, key_event);
-                }
-                break;
-            }
-        }
-        Ok(())
-    }
+    }    
 
     pub fn open_console(&mut self) {
         if self.role_is_selected {
