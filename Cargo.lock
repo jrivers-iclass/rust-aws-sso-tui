@@ -77,7 +77,6 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sha1",
- "strum_macros",
  "tokio",
  "urlencoding",
  "webbrowser",
