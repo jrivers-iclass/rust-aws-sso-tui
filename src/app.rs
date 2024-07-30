@@ -226,6 +226,7 @@ impl App {
         for route_config in &mut self.routes.iter_mut() {            
             if route_config.route.active(state.clone()) {
                 {
+                    // TODO: Fix borrow issue with self
                     route_config.route.render(frame, self);
                 }
             }
@@ -245,7 +246,16 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
-        self.credential_message = "".to_string();
+        let state = self.clone();
+        for route_config in &mut self.routes.iter_mut() {            
+            if route_config.route.active(state.clone()) {
+                {
+                    // TODO: Fix borrow issue with self
+                    route_config.route.handle_key_events(self, key_event);
+                }
+                break;
+            }
+        }
         Ok(())
     }
 
