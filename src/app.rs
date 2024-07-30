@@ -14,14 +14,6 @@ use crate::sso::{ConfigProvider, RoleCredentials};
 
 const ITEM_HEIGHT: usize = 4;
 
-#[derive(Clone, Eq, PartialEq, Hash, strum_macros::Display)]
-pub enum CurrentPage{
-    AccountList,
-    Config,
-    Credentials,
-    Roles
-}
-
 #[derive(Clone)]
 pub struct RouteConfig {
     pub route: PageEnum
@@ -64,7 +56,6 @@ pub struct App {
     pub value_input: String,
     pub currently_editing: bool,
     pub token_prompt: String,
-    pub current_page: CurrentPage,
     pub routes: Vec<RouteConfig>,
     pub config_options: ConfigOptions,
 }
@@ -88,7 +79,6 @@ impl Default for App {
             value_input: String::new(),
             currently_editing: false,
             token_prompt: String::new(),
-            current_page: CurrentPage::AccountList,
             routes: vec![
                 RouteConfig {
                     route: PageEnum::AccountsPage(pages::AccountsPage)
