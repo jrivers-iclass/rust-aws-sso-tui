@@ -1,4 +1,4 @@
-use crate::{aws::AccountInfo, pages::{self, PageEnum}, sso, tui};
+use crate::{aws::AccountInfo, pages::{self, Page, PageEnum}, sso, tui};
 use directories::UserDirs;
 use ini::Ini;
 use ratatui::{
@@ -46,7 +46,7 @@ pub struct ConfigOptions {
     pub options: Vec<ConfigOption>,
 }
 
-
+#[derive(Clone)]
 pub struct App {
     pub table_state: TableState,
     pub rows: Vec<AccountRow>,
@@ -222,7 +222,14 @@ impl App {
     }
 
     fn render_frame(&mut self, frame: &mut Frame) { 
-    
+        let state = self.clone();
+        for route_config in &mut self.routes.iter_mut() {            
+            if route_config.route.active(state.clone()) {
+                {
+                    route_config.route.render(frame, self);
+                }
+            }
+        }
     }
 
     /// updates the application's self based on user input
